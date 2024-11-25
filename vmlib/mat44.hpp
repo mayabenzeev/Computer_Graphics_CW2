@@ -88,7 +88,7 @@ Vec4f operator*( Mat44f const& aLeft, Vec4f const& aRight ) noexcept
 					aLeft(i, 2)*aRight.z + 
 					aLeft(i, 3)*aRight.w;
 	}
-	return result
+	return result;
 }
 
 // Functions:

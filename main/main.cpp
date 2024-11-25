@@ -16,12 +16,27 @@
 #include "../vmlib/vec4.hpp"
 #include "../vmlib/mat44.hpp"
 
+#include "../third_party/rapidobj/include/rapidobj/rapidobj.hpp"
+
 #include "defaults.hpp"
 
 
 namespace
 {
 	constexpr char const* kWindowTitle = "COMP3811 - CW2";
+	// ************
+	struct State_
+	{
+		ShaderProgram* prog;
+	};
+
+	rapidobj::Result load_wavefront_obj( char const* aPath );
+
+	GLuint createVAO( const rapidobj::Result &result ) ; 
+
+	// ************
+
+	
 	
 	void glfw_callback_error_( int, char const* );
 
@@ -92,6 +107,11 @@ int main() try
 
 
 	// Set up event handling
+	// ************
+	State_ state{};
+
+	glfwSetWindowUserPointer( window, &state );
+	// **********
 	// TODO: Additional event handling setup
 
 	glfwSetKeyCallback( window, &glfw_callback_key_ );
@@ -131,12 +151,29 @@ int main() try
 
 	glViewport( 0, 0, iwidth, iheight );
 
+	// ************
+	// Load shader program
+	ShaderProgram prog( {
+		{ GL_VERTEX_SHADER, "assets/cw2/default.vert" },
+		{ GL_FRAGMENT_SHADER, "assets/cw2/default.frag" }
+	} );
+
+	state.prog = &prog;
+	// ************
+
 	// Other initialization & loading
 	OGL_CHECKPOINT_ALWAYS();
 	
 	// TODO: global GL setup goes here
 
 	OGL_CHECKPOINT_ALWAYS();
+
+
+	// ************
+	//TODO: VAO VBO
+	rapidobj::Result objResult = load_wavefront_obj("assets/cw2/langerso.obj");
+	GLuint vao = createVAO(objResult); // Returns a VAO pointer from the Attributes object
+	// ************
 
 	// Main loop
 	while( !glfwWindowShouldClose( window ) )
@@ -173,7 +210,23 @@ int main() try
 		// Draw scene
 		OGL_CHECKPOINT_DEBUG();
 
+		// ************
 		//TODO: draw frame
+		// Clear color buffer to specified clear color (glClearColor())
+		glClear( GL_COLOR_BUFFER_BIT );
+		// We want to draw with our program.
+		glUseProgram( prog.programId() );
+		// Specify the base color (uBaseColor in location 0 in the fragment shader)
+		static float const baseColor[] = { 0.2f, 1.f, 1.f };
+		glUniform3fv( 0, 1, baseColor ); /*first item is location in shader*/
+		// Source input as defined in our VAO
+		glBindVertexArray( vao );
+		// Draw a single triangle (= 3 vertices), starting at index 0
+		glDrawArrays( GL_TRIANGLES, 0, 3 );
+		// Reset state
+		glBindVertexArray( 0 );
+		glUseProgram( 0 );
+		// ************
 
 		OGL_CHECKPOINT_DEBUG();
 
@@ -211,6 +264,81 @@ namespace
 		}
 	}
 
+	rapidobj::Result load_wavefront_obj( char const* aPath )
+	{
+		// Ask rapidobj to load the requested file
+		auto result = rapidobj::ParseFile( aPath );
+		if( result.error ) throw Error( "Unable to load OBJ file ’%s’: %s", aPath, result.error.code.message().c_str() );
+
+		// OBJ files can define faces that are not triangles. However, OpenGL will only render triangles (and lines
+		// and points), so we must triangulate any faces that are not already triangles. Fortunately, rapidobj can do
+		// this for us.
+		rapidobj::Triangulate( result );
+
+		return result;
+	}
+
+	GLuint createVAO( const rapidobj::Result &result ) 
+	{
+		GLuint vboPositions, vboTexcoords, vboNormals;
+		GLuint vao = 0;
+
+		glGenVertexArrays( 1, &vao );
+		glBindVertexArray( vao );
+
+		if ( !result.attributes.positions.empty() ) 
+		{
+			glGenBuffers( 1, &vboPositions );
+			glBindBuffer( GL_ARRAY_BUFFER, vboPositions );
+			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.positions.size(), result.attributes.positions.data(), GL_STATIC_DRAW) ;
+			glVertexAttribPointer(
+				0, // location = 0 in vertex shader
+				3, GL_FLOAT, GL_FALSE, // 3 floats, not normalized to [0..1] (GL FALSE)
+				0, // stride = 0 indicates that there is no padding between inputs
+				0 // data starts at offset 0 in the VBO.
+			);
+			glEnableVertexAttribArray( 0 );
+		}
+
+		if ( !result.attributes.texcoords.empty() ) 
+		{
+			glGenBuffers( 1, &vboTexcoords );
+			glBindBuffer( GL_ARRAY_BUFFER, vboTexcoords) ;
+			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.texcoords.size(), result.attributes.texcoords.data(), GL_STATIC_DRAW );
+				glVertexAttribPointer(
+				1, // location = 0 in vertex shader
+				2, GL_FLOAT, GL_FALSE, // 2 floats, not normalized to [0..1] (GL FALSE)
+				0, // stride = 0 indicates that there is no padding between inputs
+				0 // data starts at offset 0 in the VBO.
+			);
+			glEnableVertexAttribArray( 1 );
+		}
+
+		if ( !result.attributes.normals.empty() ) 
+		{
+			glGenBuffers( 1, &vboNormals );
+			glBindBuffer( GL_ARRAY_BUFFER, vboNormals );
+			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.normals.size(), result.attributes.normals.data(), GL_STATIC_DRAW );
+				glVertexAttribPointer(
+				2, // location = 0 in vertex shader
+				3, GL_FLOAT, GL_FALSE, // 3 floats, not normalized to [0..1] (GL FALSE)
+				0, // stride = 0 indicates that there is no padding between inputs
+				0 // data starts at offset 0 in the VBO.
+			);
+			glEnableVertexAttribArray( 2 );
+		}
+
+		// unbind vao
+		glBindVertexArray( 0 );
+		glBindBuffer( GL_ARRAY_BUFFER, 0 );
+
+		// Clean up buffers. these are not deleted fully, as the VAO holds a reference to them.
+		glDeleteBuffers( 1, &vboPositions );
+		glDeleteBuffers( 1, &vboTexcoords );
+		glDeleteBuffers( 1, &vboNormals );
+
+		return vao;
+	}
 }
 
 namespace
