@@ -186,12 +186,12 @@ Mat44f make_perspective_projection( float aFovInRadians, float aAspect, float aN
 	// aAspect - proportional relationship between a screen´s width and height.
 	// aNear - screen
 	// aFar - depth limit
-	float t = std::tan(aFovInRadians / 2);
+	float s = 1 / std::tan(aFovInRadians / 2);
 	
-	return { aAspect / t, 0.f, 0.f, 0.f,
-			0.f, 1 / t, 0.f, 0.f,
+	return { s / aAspect, 0.f, 0.f, 0.f,
+			0.f, s, 0.f, 0.f,
 			0.f, 0.f, -(aFar + aNear) / (aFar - aNear), (-2 * aFar * aNear) / (aFar - aNear),
-			0.f, 0.f, 1.f, 0.f };
+			0.f, 0.f, -1.f, 0.f };
 }
 
 #endif // MAT44_HPP_E7187A26_469E_48AD_A3D2_63150F05A4CA

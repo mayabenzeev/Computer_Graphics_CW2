@@ -25,22 +25,40 @@ namespace
 {
 	constexpr char const* kWindowTitle = "COMP3811 - CW2";
 	// ************
+
+	constexpr float kMovementPerSecond_ = 5.f; // units per second
+	constexpr float kMouseSensitivity_ = 0.01f; // radians per pixel
 	struct State_
 	{
 		ShaderProgram* prog;
+		
+		struct CamCtrl_
+		{
+			bool cameraActive;
+			bool actionZoomIn, actionZoomOut;
+			bool actionMoveForward, actionMoveBackward, actionMoveLeft, actionMoveRight, actionMoveUp, actionMoveDown;
+			
+			float phi, theta, movementSpeed;
+			Vec3f cameraPosition;
+			float radius;
+
+			float lastX, lastY;
+		} camControl;
 	};
 
 	rapidobj::Result load_wavefront_obj( char const* aPath );
 
-	GLuint createVAO( const rapidobj::Result &result ) ; 
+	GLuint createVAO( const rapidobj::Result &result, size_t &numVertices) ; 
 
 	// ************
-
 	
 	
 	void glfw_callback_error_( int, char const* );
 
 	void glfw_callback_key_( GLFWwindow*, int, int, int, int );
+	// *********
+	void glfw_callback_motion_( GLFWwindow*, double, double );
+	// **********
 
 	struct GLFWCleanupHelper
 	{
@@ -115,6 +133,8 @@ int main() try
 	// TODO: Additional event handling setup
 
 	glfwSetKeyCallback( window, &glfw_callback_key_ );
+	glfwSetCursorPosCallback( window, &glfw_callback_motion_ );
+
 
 	// Set up drawing stuff
 	glfwMakeContextCurrent( window );
@@ -140,6 +160,7 @@ int main() try
 
 	// TODO: global GL setup goes here
 
+
 	OGL_CHECKPOINT_ALWAYS();
 
 	// Get actual framebuffer size.
@@ -159,20 +180,34 @@ int main() try
 	} );
 
 	state.prog = &prog;
+	state.camControl.radius = 10.f;
+
+	// Animation state
+	auto last = Clock::now();
+
+	float angle = 0.f;
 	// ************
 
 	// Other initialization & loading
 	OGL_CHECKPOINT_ALWAYS();
 	
 	// TODO: global GL setup goes here
+	// ******************
+	glEnable( GL_FRAMEBUFFER_SRGB ); // enables automatic sRGB conversion of colors
+	glEnable( GL_CULL_FACE ); // cull triangles based on their winding
+	glEnable( GL_DEPTH_TEST ); // Enable depth testing
+	glClearColor( 0.2f, 0.2f, 0.2f, 0.0f ); // Sets the color to clear the color buffer
+	// ******************
 
 	OGL_CHECKPOINT_ALWAYS();
 
 
 	// ************
 	//TODO: VAO VBO
+	size_t numVertices = 0;
+
 	rapidobj::Result objResult = load_wavefront_obj("assets/cw2/langerso.obj");
-	GLuint vao = createVAO(objResult); // Returns a VAO pointer from the Attributes object
+	GLuint vao = createVAO(objResult, numVertices); // Returns a VAO pointer from the Attributes object
 	// ************
 
 	// Main loop
@@ -205,7 +240,38 @@ int main() try
 		}
 
 		// Update state
-		//TODO: update state
+		// ************** from ex4
+		auto const now = Clock::now();
+		float dt = std::chrono::duration_cast<Secondsf>(now-last).count();
+		last = now;
+
+		angle += dt * std::numbers::pi_v<float> * 0.3f;
+		if( angle >= 2.f*std::numbers::pi_v<float> )
+			angle -= 2.f*std::numbers::pi_v<float>;
+
+		// Update camera state
+		if( state.camControl.actionZoomIn )
+			state.camControl.radius -= kMovementPerSecond_ * dt;
+		else if( state.camControl.actionZoomOut )
+			state.camControl.radius += kMovementPerSecond_ * dt;
+
+		if( state.camControl.radius <= 0.1f )
+			state.camControl.radius = 0.1f;
+
+		// Update: compute transformation matrices
+		// Define the model2world matrix
+		Mat44f model2world = make_rotation_y(angle); // Angle updates per frame for spinning cube
+
+		// Define the world2camera matrix "arc-ball control set up"
+		Mat44f Rx = make_rotation_x(state.camControl.theta);
+		Mat44f Ry = make_rotation_y(state.camControl.phi);
+		Mat44f T = make_translation({ 0.f, 0.f, -state.camControl.radius });
+		Mat44f world2camera = T * Rx * Ry;
+
+		Mat44f projection = make_perspective_projection( 60.f * std::numbers::pi_v<float> / 180.f, fbwidth/float(fbheight), 0.1f, 100.0f );
+		//Define and compute projCameraWorld matrix
+		Mat44f projCameraWorld = projection * world2camera * model2world;
+		// ************** from ex4
 
 		// Draw scene
 		OGL_CHECKPOINT_DEBUG();
@@ -213,16 +279,23 @@ int main() try
 		// ************
 		//TODO: draw frame
 		// Clear color buffer to specified clear color (glClearColor())
-		glClear( GL_COLOR_BUFFER_BIT );
-		// We want to draw with our program.
+		// glClear( GL_COLOR_BUFFER_BIT ); // TODO: for basic 2D rendering but insufficient for 3D rendering.
+		glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );  // Resets also the depth values to the farthest dept 
+		// glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT );  // Resets also the depth values to the farthest dept and stencil testing 
+
+		// Use shader program
 		glUseProgram( prog.programId() );
-		// Specify the base color (uBaseColor in location 0 in the fragment shader)
+
+		// Specify the base color ana pass it to the shader
 		static float const baseColor[] = { 0.2f, 1.f, 1.f };
-		glUniform3fv( 0, 1, baseColor ); /*first item is location in shader*/
-		// Source input as defined in our VAO
-		glBindVertexArray( vao );
-		// Draw a single triangle (= 3 vertices), starting at index 0
-		glDrawArrays( GL_TRIANGLES, 0, 3 );
+		glUniform3fv( 4, 1, baseColor ); // location 4 in shader
+
+		// Pass transformation matrix to shader
+    	glUniformMatrix4fv(3, 1, GL_TRUE, projCameraWorld.v	);
+		
+		// Draw scene
+		glBindVertexArray( vao ); // Pass source input as defined in our VAO
+		glDrawArrays( GL_TRIANGLES, 0, numVertices ); // Draw <numVertices> vertices (=<numVertices> / 3 triangles), starting at index 0
 		// Reset state
 		glBindVertexArray( 0 );
 		glUseProgram( 0 );
@@ -235,6 +308,7 @@ int main() try
 	}
 
 	// Cleanup.
+	state.prog = nullptr;
 	//TODO: additional cleanup
 	
 	return 0;
@@ -262,23 +336,99 @@ namespace
 			glfwSetWindowShouldClose( aWindow, GLFW_TRUE );
 			return;
 		}
+
+		if( auto* state = static_cast<State_*>(glfwGetWindowUserPointer( aWindow )) )
+		{
+			// R-key reloads shaders.
+			if( GLFW_KEY_R == aKey && GLFW_PRESS == aAction )
+			{
+				if( state->prog )
+				{
+					try
+					{
+						state->prog->reload();
+						std::fprintf( stderr, "Shaders reloaded and recompiled.\n" );
+					}
+					catch( std::exception const& eErr )
+					{
+						std::fprintf( stderr, "Error when reloading shader:\n" );
+						std::fprintf( stderr, "%s\n", eErr.what() );
+						std::fprintf( stderr, "Keeping old shader.\n" );
+					}
+				}
+			}
+
+			// Space toggles camera
+			if( GLFW_KEY_SPACE == aKey && GLFW_PRESS == aAction )
+			{
+				state->camControl.cameraActive = !state->camControl.cameraActive;
+
+				if( state->camControl.cameraActive )
+					glfwSetInputMode( aWindow, GLFW_CURSOR, GLFW_CURSOR_HIDDEN );
+				else
+					glfwSetInputMode( aWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL );
+			}
+
+			// Camera controls if camera is active
+			if( state->camControl.cameraActive )
+			{
+				if( GLFW_KEY_W == aKey )
+				{
+					if( GLFW_PRESS == aAction )
+						state->camControl.actionZoomIn = true;
+					else if( GLFW_RELEASE == aAction )
+						state->camControl.actionZoomIn = false;
+				}
+				else if( GLFW_KEY_S == aKey )
+				{
+					if( GLFW_PRESS == aAction )
+						state->camControl.actionZoomOut = true;
+					else if( GLFW_RELEASE == aAction )
+						state->camControl.actionZoomOut = false;
+				}
+			}
+		}
+	}
+
+	void glfw_callback_motion_( GLFWwindow* aWindow, double aX, double aY )
+	{
+		if( auto* state = static_cast<State_*>(glfwGetWindowUserPointer( aWindow )) )
+		{
+			if( state->camControl.cameraActive )
+			{
+				auto const dx = float(aX-state->camControl.lastX);
+				auto const dy = float(aY-state->camControl.lastY);
+
+				state->camControl.phi += dx*kMouseSensitivity_;
+				
+				state->camControl.theta += dy*kMouseSensitivity_;
+				if( state->camControl.theta > std::numbers::pi_v<float>/2.f )
+					state->camControl.theta = std::numbers::pi_v<float>/2.f;
+				else if( state->camControl.theta < -std::numbers::pi_v<float>/2.f )
+					state->camControl.theta = -std::numbers::pi_v<float>/2.f;
+			}
+
+			state->camControl.lastX = float(aX);
+			state->camControl.lastY = float(aY);
+		}
 	}
 
 	rapidobj::Result load_wavefront_obj( char const* aPath )
 	{
-		// Ask rapidobj to load the requested file
+		// ask for loading the requested file 
 		auto result = rapidobj::ParseFile( aPath );
-		if( result.error ) throw Error( "Unable to load OBJ file ’%s’: %s", aPath, result.error.code.message().c_str() );
+		if( result.error ) 
+		{
+			throw Error( "Unable to load OBJ file ’%s’: %s", aPath, result.error.code.message().c_str());
+		}
 
-		// OBJ files can define faces that are not triangles. However, OpenGL will only render triangles (and lines
-		// and points), so we must triangulate any faces that are not already triangles. Fortunately, rapidobj can do
-		// this for us.
+		// triangulate all faces since openGL renders only triangles
 		rapidobj::Triangulate( result );
 
 		return result;
 	}
 
-	GLuint createVAO( const rapidobj::Result &result ) 
+	GLuint createVAO( const rapidobj::Result &result, size_t &numVertices ) 
 	{
 		GLuint vboPositions, vboTexcoords, vboNormals;
 		GLuint vao = 0;
@@ -288,9 +438,9 @@ namespace
 
 		if ( !result.attributes.positions.empty() ) 
 		{
-			glGenBuffers( 1, &vboPositions );
+			glGenBuffers( 1, &vboPositions ); // Generates 1 name for vbo positions
 			glBindBuffer( GL_ARRAY_BUFFER, vboPositions );
-			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.positions.size(), result.attributes.positions.data(), GL_STATIC_DRAW) ;
+			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.positions.size(), result.attributes.positions.data(), GL_STATIC_DRAW) ; // Allocate and store data
 			glVertexAttribPointer(
 				0, // location = 0 in vertex shader
 				3, GL_FLOAT, GL_FALSE, // 3 floats, not normalized to [0..1] (GL FALSE)
@@ -298,15 +448,18 @@ namespace
 				0 // data starts at offset 0 in the VBO.
 			);
 			glEnableVertexAttribArray( 0 );
+
+			// Calculate the number of vertices to draw later
+			numVertices = result.attributes.positions.size() / 3;
 		}
 
 		if ( !result.attributes.texcoords.empty() ) 
 		{
-			glGenBuffers( 1, &vboTexcoords );
+			glGenBuffers( 1, &vboTexcoords ); // Generates 1 name for vbo textures
 			glBindBuffer( GL_ARRAY_BUFFER, vboTexcoords) ;
-			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.texcoords.size(), result.attributes.texcoords.data(), GL_STATIC_DRAW );
+			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.texcoords.size(), result.attributes.texcoords.data(), GL_STATIC_DRAW ); // Allocate and store data
 				glVertexAttribPointer(
-				1, // location = 0 in vertex shader
+				1, // location = 1 in vertex shader
 				2, GL_FLOAT, GL_FALSE, // 2 floats, not normalized to [0..1] (GL FALSE)
 				0, // stride = 0 indicates that there is no padding between inputs
 				0 // data starts at offset 0 in the VBO.
@@ -316,11 +469,11 @@ namespace
 
 		if ( !result.attributes.normals.empty() ) 
 		{
-			glGenBuffers( 1, &vboNormals );
+			glGenBuffers( 1, &vboNormals ); // Generates 1 name for vbo normals
 			glBindBuffer( GL_ARRAY_BUFFER, vboNormals );
-			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.normals.size(), result.attributes.normals.data(), GL_STATIC_DRAW );
+			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.normals.size(), result.attributes.normals.data(), GL_STATIC_DRAW ); // Allocate and store data
 				glVertexAttribPointer(
-				2, // location = 0 in vertex shader
+				2, // location = 2 in vertex shader
 				3, GL_FLOAT, GL_FALSE, // 3 floats, not normalized to [0..1] (GL FALSE)
 				0, // stride = 0 indicates that there is no padding between inputs
 				0 // data starts at offset 0 in the VBO.
