@@ -171,14 +171,11 @@ Mat44f make_translation( Vec3f aTranslation ) noexcept
 inline
 Mat44f make_scaling( float aSX, float aSY, float aSZ ) noexcept
 {
-	//TODO: your implementation goes here
-	//TODO: remove the following when you start your implementation
-	(void)aSX;  // Avoid warnings about unused arguments until the function
-	(void)aSY;  // is properly implemented.
-	(void)aSZ;
-	return kIdentity44f;
+	return { aSX, 0.f, 0.f, 0.f,
+			0.f , aSY, 0.f, 0.f,
+			0.f , 0.f, aSZ, 0.f,
+			0.f , 0.f, 0.f, 1.f };
 }
-
 inline
 Mat44f make_perspective_projection( float aFovInRadians, float aAspect, float aNear, float aFar ) noexcept
 {
