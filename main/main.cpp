@@ -15,10 +15,14 @@
 
 #include "../vmlib/vec4.hpp"
 #include "../vmlib/mat44.hpp"
+#include "../vmlib/mat33.hpp"
 
 #include "../third_party/rapidobj/include/rapidobj/rapidobj.hpp"
 
 #include "defaults.hpp"
+#include "loadobj.hpp"
+#include "simple_mesh.hpp"
+
 
 
 namespace
@@ -46,12 +50,6 @@ namespace
 		} camControl;
 	};
 
-	rapidobj::Result load_wavefront_obj( char const* aPath );
-
-	GLuint createVAO( const rapidobj::Result &result, std::size_t &numVertices) ; 
-
-	// ************
-	
 	
 	void glfw_callback_error_( int, char const* );
 
@@ -205,10 +203,12 @@ int main() try
 
 	// ************
 	//TODO: VAO VBO
-	std::size_t numVertices = 0;
 
-	rapidobj::Result objResult = load_wavefront_obj("assets/cw2/langerso.obj");
-	GLuint vao = createVAO(objResult, numVertices); // Returns a VAO pointer from the Attributes object
+	SimpleMeshData objMeshResult = load_wavefront_obj("assets/cw2/langerso.obj");
+	GLuint vao = create_vao(objMeshResult); // Returns a VAO pointer from the Attributes object
+
+	std::size_t numVertices = objMeshResult.positions.size() / 3; // Calculate the number of vertices to draw later
+
 	// ************
 
 	// Main loop
@@ -272,6 +272,7 @@ int main() try
 		Mat44f projection = make_perspective_projection( 60.f * std::numbers::pi_v<float> / 180.f, fbwidth/float(fbheight), 0.1f, 100.0f );
 		//Define and compute projCameraWorld matrix
 		Mat44f projCameraWorld = projection * world2camera * model2world;
+		Mat33f normalMatrix = mat44_to_mat33( transpose(invert(model2world)) );
 		// ************** from ex4
 
 		// Draw scene
@@ -289,10 +290,16 @@ int main() try
 
 		// Specify the base color ana pass it to the shader
 		static float const baseColor[] = { 0.2f, 1.f, 1.f };
-		glUniform3fv(1, 1, baseColor); // location 1 in shader
+		glUniform3fv(2, 1, baseColor); // location 2 in shader
+		// glUniformMatrix3fv(
+		// 	1, 
+		// 	1, 
+		// 	GL_TRUE, 
+		// 	normalMatrix.v
+		// 	);
 
 		// Pass transformation matrix to shader
-		glUniformMatrix4fv(0, 1, GL_TRUE, projCameraWorld.v);	
+		glUniformMatrix4fv( 0, 1, GL_TRUE, projCameraWorld.v );	
 
 		// Draw scene
 		glBindVertexArray( vao ); // Pass source input as defined in our VAO
@@ -412,120 +419,6 @@ namespace
 			state->camControl.lastX = float(aX);
 			state->camControl.lastY = float(aY);
 		}
-	}
-
-	rapidobj::Result load_wavefront_obj( char const* aPath )
-	{
-		// ask for loading the requested file 
-		auto result = rapidobj::ParseFile( aPath );
-		if( result.error ) 
-		{
-			throw Error( "Unable to load OBJ file ’%s’: %s", aPath, result.error.code.message().c_str());
-		}
-
-		// triangulate all faces since openGL renders only triangles
-		rapidobj::Triangulate( result );
-
-		return result;
-	}
-
-	GLuint createVAO( const rapidobj::Result &result, std::size_t &numVertices ) 
-	{
-		GLuint vboPositions, vboColors, vboTexcoords, vboNormals;
-		GLuint vao = 0;
-
-		glGenVertexArrays( 1, &vao );
-		glBindVertexArray( vao );
-
-		std::vector<float> vertexColors; // To store per-vertex colors
-
-		if ( !result.attributes.positions.empty() ) 
-		{
-			glGenBuffers( 1, &vboPositions ); // Generates 1 name for vbo positions
-			glBindBuffer( GL_ARRAY_BUFFER, vboPositions );
-			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.positions.size(), result.attributes.positions.data(), GL_STATIC_DRAW) ; // Allocate and store data
-			glVertexAttribPointer(
-				0, // location = 0 in vertex shader
-				3, GL_FLOAT, GL_FALSE, // 3 floats, not normalized to [0..1] (GL FALSE)
-				0, // stride = 0 indicates that there is no padding between inputs
-				0 // data starts at offset 0 in the VBO.
-			);
-			glEnableVertexAttribArray( 0 );
-
-			// Calculate the number of vertices to draw later
-			numVertices = result.attributes.positions.size() / 3;
-		}
-
-		// Handle colors
-		if (!result.shapes.empty() && !result.materials.empty()) {
-			vertexColors.resize(numVertices * 3, 1.0f); // Default to white (1.0, 1.0, 1.0)
-
-			for (const auto &shape : result.shapes) {
-				for (std::size_t i = 0; i < shape.mesh.indices.size(); ++i) {
-					auto const &idx = shape.mesh.indices[i];
-
-					// Find the material for the current face
-					int materialId = shape.mesh.material_ids[i / 3];
-					if (materialId >= 0 && materialId < result.materials.size()) {
-						const auto &material = result.materials[materialId];
-						float r = material.diffuse[0];
-						float g = material.diffuse[1];
-						float b = material.diffuse[2];
-
-						// Assign diffuse color to the vertex
-						vertexColors[idx.position_index * 3 + 0] = r;
-						vertexColors[idx.position_index * 3 + 1] = g;
-						vertexColors[idx.position_index * 3 + 2] = b;
-					}
-				}
-			}
-
-			glGenBuffers(1, &vboColors);
-			glBindBuffer(GL_ARRAY_BUFFER, vboColors);
-			glBufferData(GL_ARRAY_BUFFER, vertexColors.size() * sizeof(float), vertexColors.data(), GL_STATIC_DRAW);
-			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0); // Location 1 for colors
-			glEnableVertexAttribArray(1);
-		}
-
-		if ( !result.attributes.texcoords.empty() ) 
-		{
-			glGenBuffers( 1, &vboTexcoords ); // Generates 1 name for vbo textures
-			glBindBuffer( GL_ARRAY_BUFFER, vboTexcoords) ;
-			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.texcoords.size(), result.attributes.texcoords.data(), GL_STATIC_DRAW ); // Allocate and store data
-				glVertexAttribPointer(
-				2, // location = 2 in vertex shader
-				2, GL_FLOAT, GL_FALSE, // 2 floats, not normalized to [0..1] (GL FALSE)
-				0, // stride = 0 indicates that there is no padding between inputs
-				0 // data starts at offset 0 in the VBO.
-			);
-			glEnableVertexAttribArray( 2 );
-		}
-
-		if ( !result.attributes.normals.empty() ) 
-		{
-			glGenBuffers( 1, &vboNormals ); // Generates 1 name for vbo normals
-			glBindBuffer( GL_ARRAY_BUFFER, vboNormals );
-			glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.normals.size(), result.attributes.normals.data(), GL_STATIC_DRAW ); // Allocate and store data
-				glVertexAttribPointer(
-				3, // location = 3 in vertex shader
-				3, GL_FLOAT, GL_FALSE, // 3 floats, not normalized to [0..1] (GL FALSE)
-				0, // stride = 0 indicates that there is no padding between inputs
-				0 // data starts at offset 0 in the VBO.
-			);
-			glEnableVertexAttribArray( 3 );
-		}
-
-		// unbind vao
-		glBindVertexArray( 0 );
-		glBindBuffer( GL_ARRAY_BUFFER, 0 );
-
-		// Clean up buffers. these are not deleted fully, as the VAO holds a reference to them.
-		glDeleteBuffers( 1, &vboPositions );
-		glDeleteBuffers( 1, &vboColors );
-		glDeleteBuffers( 1, &vboTexcoords );
-		glDeleteBuffers( 1, &vboNormals );
-
-		return vao;
 	}
 }
 
