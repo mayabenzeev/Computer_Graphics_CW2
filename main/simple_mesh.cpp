@@ -4,13 +4,14 @@ SimpleMeshData concatenate( SimpleMeshData aM, SimpleMeshData const& aN )
 {
 	aM.positions.insert( aM.positions.end(), aN.positions.begin(), aN.positions.end() );
 	aM.colors.insert( aM.colors.end(), aN.colors.begin(), aN.colors.end() );
+	aM.normals.insert( aM.normals.end(), aN.normals.begin(), aN.normals.end() );
 	return aM;
 }
 
 
 GLuint create_vao( SimpleMeshData const& aMeshData )
 {
-	GLuint vboPositions, vboColors;
+	GLuint vboPositions, vboColors, vboNormals;
 	// , vboTexcoords, vboNormals;
 	
 	GLuint vao = 0;
@@ -22,7 +23,7 @@ GLuint create_vao( SimpleMeshData const& aMeshData )
 	// Positions VBO
 	glGenBuffers( 1, &vboPositions ); // Generates 1 name for vbo positions
 	glBindBuffer( GL_ARRAY_BUFFER, vboPositions );
-	glBufferData( GL_ARRAY_BUFFER, sizeof(float) * aMeshData.positions.size(), aMeshData.positions.data(), GL_STATIC_DRAW) ; // Allocate and store data
+	glBufferData( GL_ARRAY_BUFFER, sizeof(Vec3f) * aMeshData.positions.size(), aMeshData.positions.data(), GL_STATIC_DRAW) ; // Allocate and store data
 	glVertexAttribPointer(
 		0, // location = 0 in vertex shader
 		3, GL_FLOAT, GL_FALSE, // 3 floats, not normalized to [0..1] (GL FALSE)
@@ -35,7 +36,7 @@ GLuint create_vao( SimpleMeshData const& aMeshData )
 	// Colours VBO
 	glGenBuffers( 1, &vboColors ); // Generates 1 name for vbo colours
 	glBindBuffer( GL_ARRAY_BUFFER, vboColors );
-	glBufferData( GL_ARRAY_BUFFER, sizeof(float) * aMeshData.colors.size(), aMeshData.colors.data(), GL_STATIC_DRAW) ; // Allocate and store data
+	glBufferData( GL_ARRAY_BUFFER, sizeof(Vec3f) * aMeshData.colors.size(), aMeshData.colors.data(), GL_STATIC_DRAW) ; // Allocate and store data
 	glVertexAttribPointer(
 		1, // location = 1 in vertex shader
 		3, GL_FLOAT, GL_FALSE, // 3 floats, not normalized to [0..1] (GL FALSE)
@@ -73,19 +74,17 @@ GLuint create_vao( SimpleMeshData const& aMeshData )
 	// 	glEnableVertexAttribArray(1);
 	// }
 
-	// if ( !result.attributes.normals.empty() ) 
-	// {
-	// 	glGenBuffers( 1, &vboNormals ); // Generates 1 name for vbo normals
-	// 	glBindBuffer( GL_ARRAY_BUFFER, vboNormals );
-	// 	glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.normals.size(), result.attributes.normals.data(), GL_STATIC_DRAW ); // Allocate and store data
-	// 		glVertexAttribPointer(
-	// 		2, // location = 2 in vertex shader
-	// 		3, GL_FLOAT, GL_FALSE, // 3 floats, not normalized to [0..1] (GL FALSE)
-	// 		0, // stride = 0 indicates that there is no padding between inputs
-	// 		0 // data starts at offset 0 in the VBO.
-	// 	);
-	// 	glEnableVertexAttribArray( 2 );
-	// }
+	glGenBuffers( 1, &vboNormals ); // Generates 1 name for vbo normals
+	glBindBuffer( GL_ARRAY_BUFFER, vboNormals );
+	glBufferData( GL_ARRAY_BUFFER, sizeof(Vec3f) * aMeshData.normals.size(), aMeshData.normals.data(), GL_STATIC_DRAW ); // Allocate and store data
+		glVertexAttribPointer(
+		2, // location = 2 in vertex shader
+		3, GL_FLOAT, GL_FALSE, // 3 floats, not normalized to [0..1] (GL FALSE)
+		0, // stride = 0 indicates that there is no padding between inputs
+		0 // data starts at offset 0 in the VBO.
+	);
+	glEnableVertexAttribArray( 2 );
+
 
 	// if ( !result.attributes.texcoords.empty() ) 
 	// {
@@ -110,7 +109,7 @@ GLuint create_vao( SimpleMeshData const& aMeshData )
 	// Clean up buffers. these are not deleted fully, as the VAO holds a reference to them.
 	glDeleteBuffers( 1, &vboPositions );
 	glDeleteBuffers( 1, &vboColors );
-	// glDeleteBuffers( 1, &vboNormals );
+	glDeleteBuffers( 1, &vboNormals );
 	// glDeleteBuffers( 1, &vboTexcoords );
 
 	return vao;

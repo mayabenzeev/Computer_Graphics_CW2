@@ -39,6 +39,12 @@ SimpleMeshData load_wavefront_obj( char const* aPath )
 				mat.ambient[1],
 				mat.ambient[2]
 			} );
+
+			// Pushing the vector normals from the correct index position
+			ret.normals.emplace_back( Vec3f{   result.attributes.normals[idx.normal_index*3 + 0],
+				result.attributes.normals[idx.normal_index*3 + 1],
+				result.attributes.normals[idx.normal_index*3 + 2]
+			} );
 		}	
 	}
 

@@ -195,7 +195,7 @@ int main() try
 	glEnable( GL_CULL_FACE ); // Enable face culling
 	// glFrontFace(GL_CCW); 
 	glEnable( GL_DEPTH_TEST ); // Enable depth testing
-	glClearColor( 0.2f, 0.2f, 0.2f, 0.0f ); // Sets the clear color to gray 
+	glClearColor( 0.2f, 0.2f, 0.2f, 0.0f ); // Sets the clear color to dark gray 
 	// ******************
 
 	OGL_CHECKPOINT_ALWAYS();
@@ -207,7 +207,7 @@ int main() try
 	SimpleMeshData objMeshResult = load_wavefront_obj("assets/cw2/langerso.obj");
 	GLuint vao = create_vao(objMeshResult); // Returns a VAO pointer from the Attributes object
 
-	std::size_t numVertices = objMeshResult.positions.size() / 3; // Calculate the number of vertices to draw later
+	std::size_t numVertices = objMeshResult.positions.size() ; // Calculate the number of vertices to draw later
 
 	// ************
 
@@ -288,22 +288,26 @@ int main() try
 		// Use shader program
 		glUseProgram( prog.programId() );
 
-		// Specify the base color ana pass it to the shader
-		static float const baseColor[] = { 0.2f, 1.f, 1.f };
-		glUniform3fv(2, 1, baseColor); // location 2 in shader
-		// glUniformMatrix3fv(
-		// 	1, 
-		// 	1, 
-		// 	GL_TRUE, 
-		// 	normalMatrix.v
-		// 	);
+		// Pass uniforms to the shaders
+		glUniformMatrix4fv( 0, 1, GL_TRUE, projCameraWorld.v );	// projCameraWorld matrix 
+		glUniformMatrix3fv( 1, 1, GL_TRUE, normalMatrix.v); // Normal matrix
+		
+		// Pass uniforms for simplified (Blinn-)Phong shading
+		Vec3f lightDir = normalize( Vec3f{ -1.f, 1.f, 0.5f } );
+		glUniform3fv( 2, 1, &lightDir.x );
+		// glUniform3f( 3, 0.9f, 0.9f, 0.6f );
+		glUniform3f( 3, 1.f, 1.f, 1.f );
+		glUniform3f( 4, 0.2f, 0.2f, 0.2f );
+		// glUniform3f( 4, 0.05f, 0.05f, 0.05f );
 
-		// Pass transformation matrix to shader
-		glUniformMatrix4fv( 0, 1, GL_TRUE, projCameraWorld.v );	
+		// Specify the base color and pass it to the shader
+		//static float const baseColor[] = { 0.2f, 1.f, 1.f };
+		//glUniform3fv(2, 1, baseColor); // location 2 in shader
 
 		// Draw scene
 		glBindVertexArray( vao ); // Pass source input as defined in our VAO
-		glDrawArrays( GL_TRIANGLES, 0, numVertices ); // Draw <numVertices> vertices (=<numVertices> / 3 triangles), starting at index 0
+		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+		glDrawArrays( GL_TRIANGLES, 0, numVertices ); // Draw <numVertices> vertices , starting at index 0
 		// Reset state
 		glBindVertexArray( 0 );
 		glUseProgram( 0 );
