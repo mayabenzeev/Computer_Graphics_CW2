@@ -30,7 +30,7 @@ namespace
 	constexpr char const* kWindowTitle = "COMP3811 - CW2";
 	// ************
 
-	constexpr float kMovementPerSecond_ = 5.f; // units per second
+	constexpr float kMovementPerSecond_ = 5.0f; // units per second
 	constexpr float kMouseSensitivity_ = 0.01f; // radians per pixel
 	struct State_
 	{
@@ -39,12 +39,16 @@ namespace
 		struct CamCtrl_
 		{
 			bool cameraActive;
-			bool actionZoomIn, actionZoomOut;
 			bool actionMoveForward, actionMoveBackward, actionMoveLeft, actionMoveRight, actionMoveUp, actionMoveDown;
+			bool actionSpeedUp, actionSlowDown;
 			
-			float phi, theta, movementSpeed;
-			Vec3f cameraPosition;
+			float phi, theta, movementSpeed =2.0f;
 			float radius;
+
+			Vec3f cameraPosition = {0.0f, 0.0f, 3.0f}; // Example: starting position
+    		Vec3f cameraForwardDirection = {0.0f, 0.0f, -1.0f}; // Facing into the screen
+    		Vec3f cameraUpDirection = {0.0f, 1.0f, 0.0f}; // Y is up
+    		Vec3f cameraRightDirection = {1.0f, 0.0f, 0.0f}; // X is right
 
 			float lastX, lastY;
 		} camControl;
@@ -229,7 +233,7 @@ int main() try
 			if( 0 == nwidth || 0 == nheight )
 			{
 				// Window minimized? Pause until it is unminimized.
-				// This is a bit of a hack.
+				// This is a bit of anglea hack.
 				do
 				{
 					glfwWaitEvents();
@@ -242,19 +246,24 @@ int main() try
 
 		// Update state
 		// ************** from ex4
-		// auto const now = Clock::now();
-		// float dt = std::chrono::duration_cast<Secondsf>(now-last).count();
-		// last = now;
+		auto const now = Clock::now();
+		float dt = std::chrono::duration_cast<Secondsf>(now-last).count();
+		last = now;
 
-		// angle += dt * std::numbers::pi_v<float> * 0.3f;
-		// if( angle >= 2.f*std::numbers::pi_v<float> )
-		// 	angle -= 2.f*std::numbers::pi_v<float>;
+		// Update camera state
+		if( state.camControl.actionMoveForward )
+			state.camControl.cameraPosition += state.camControl.cameraForwardDirection * state.camControl.movementSpeed * dt;
+		else if( state.camControl.actionMoveBackward )
+			state.camControl.cameraPosition -= state.camControl.cameraForwardDirection * state.camControl.movementSpeed * dt;
+		else if (state.camControl.actionMoveLeft)
+    		state.camControl.cameraPosition -= state.camControl.cameraRightDirection * state.camControl.movementSpeed * dt;
+		else if (state.camControl.actionMoveRight)
+   			state.camControl.cameraPosition += state.camControl.cameraRightDirection * state.camControl.movementSpeed * dt;
+		else if (state.camControl.actionMoveUp)
+			state.camControl.cameraPosition += state.camControl.cameraUpDirection * state.camControl.movementSpeed * dt;
+		else if (state.camControl.actionMoveDown)
+			state.camControl.cameraPosition -= state.camControl.cameraUpDirection * state.camControl.movementSpeed * dt;
 
-		// // Update camera state
-		// if( state.camControl.actionZoomIn )
-		// 	state.camControl.radius -= kMovementPerSecond_ * dt;
-		// else if( state.camControl.actionZoomOut )
-		// 	state.camControl.radius += kMovementPerSecond_ * dt;
 
 		// if( state.camControl.radius <= 0.1f )
 		// 	state.camControl.radius = 0.1f;
@@ -333,7 +342,6 @@ catch( std::exception const& eErr )
 	return 1;
 }
 
-
 namespace
 {
 	void glfw_callback_error_( int aErrNum, char const* aErrDesc )
@@ -341,7 +349,7 @@ namespace
 		std::fprintf( stderr, "GLFW error: %s (%d)\n", aErrDesc, aErrNum );
 	}
 
-	void glfw_callback_key_( GLFWwindow* aWindow, int aKey, int, int aAction, int )
+	void glfw_callback_key_( GLFWwindow* aWindow, int aKey, int, int aAction, int mods)
 	{
 		if( GLFW_KEY_ESCAPE == aKey && GLFW_PRESS == aAction )
 		{
@@ -387,17 +395,60 @@ namespace
 				if( GLFW_KEY_W == aKey )
 				{
 					if( GLFW_PRESS == aAction )
-						state->camControl.actionZoomIn = true;
+						state->camControl.actionMoveForward = true;
 					else if( GLFW_RELEASE == aAction )
-						state->camControl.actionZoomIn = false;
+						state->camControl.actionMoveForward = false;
 				}
 				else if( GLFW_KEY_S == aKey )
 				{
 					if( GLFW_PRESS == aAction )
-						state->camControl.actionZoomOut = true;
+						state->camControl.actionMoveBackward = true;
 					else if( GLFW_RELEASE == aAction )
-						state->camControl.actionZoomOut = false;
+						state->camControl.actionMoveBackward = false;
+				}	
+				else if( GLFW_KEY_D == aKey )
+				{
+					if( GLFW_PRESS == aAction )
+						state->camControl.actionMoveRight = true;
+					else if( GLFW_RELEASE == aAction )
+						state->camControl.actionMoveRight = false;
 				}
+				else if( GLFW_KEY_A == aKey )
+				{
+					if( GLFW_PRESS == aAction )
+						state->camControl.actionMoveLeft = true;
+					else if( GLFW_RELEASE == aAction )
+						state->camControl.actionMoveLeft = false;
+				}
+				else if( GLFW_KEY_Q == aKey )
+				{
+					if( GLFW_PRESS == aAction )
+						state->camControl.actionMoveDown = true;
+					else if( GLFW_RELEASE == aAction )
+						state->camControl.actionMoveDown = false;
+				}
+				else if( GLFW_KEY_E == aKey )
+				{
+					if( GLFW_PRESS == aAction )
+						state->camControl.actionMoveUp = true;
+					else if( GLFW_RELEASE == aAction )
+						state->camControl.actionMoveUp = false;
+				}
+				
+				if ( GLFW_MOD_SHIFT == mods ) 
+				{
+					if( GLFW_PRESS == aAction )
+						state->camControl.actionSpeedUp = true;
+					else if( GLFW_RELEASE == aAction )
+						state->camControl.actionSpeedUp = false;
+        		} 
+				else if ( GLFW_MOD_CONTROL == mods ) 
+				{
+            		if( GLFW_PRESS == aAction )
+						state->camControl.actionSlowDown = true;
+					else if( GLFW_RELEASE == aAction )
+						state->camControl.actionSlowDown = false;
+        		}
 			}
 		}
 	}
@@ -425,7 +476,6 @@ namespace
 		}
 	}
 }
-
 namespace
 {
 	GLFWCleanupHelper::~GLFWCleanupHelper()
