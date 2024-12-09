@@ -44,35 +44,7 @@ GLuint create_vao( SimpleMeshData const& aMeshData )
 		0 // data starts at offset 0 in the VBO.
 	);
 	glEnableVertexAttribArray( 1 );
-	// // Handle colors
-	// if (!result.shapes.empty() && !result.materials.empty()) {
-	// 	vertexColors.resize(numVertices * 3, 1.0f); // Default to white (1.0, 1.0, 1.0)
 
-	// 	for (const auto &shape : result.shapes) {
-	// 		for (std::size_t i = 0; i < shape.mesh.indices.size(); ++i) {
-	// 			auto const &idx = shape.mesh.indices[i];
-
-	// 			int materialId = shape.mesh.material_ids[i / 3];
-	// 			if (materialId >= 0 && materialId < result.materials.size()) {
-	// 				const auto &material = result.materials[materialId];
-	// 				float r = material.diffuse[0];
-	// 				float g = material.diffuse[1];
-	// 				float b = material.diffuse[2];
-
-	// 				vertexColors[idx.position_index * 3 + 0] = r;
-	// 				vertexColors[idx.position_index * 3 + 1] = g;
-	// 				vertexColors[idx.position_index * 3 + 2] = b;
-	// 			}
-	// 		}
-	// 	}
-
-	// 	glGenBuffers(1, &vboColors);
-	// 	glBindBuffer(GL_ARRAY_BUFFER, vboColors);
-	// 	glBufferData(GL_ARRAY_BUFFER, vertexColors.size() * sizeof(float), vertexColors.data(), GL_STATIC_DRAW);
-	// 	glVertexAttribPointer(1, 3, GL_FLOAT, GL//TODO: implement me
-	// 		return 0;_FALSE, 0, 0); // Location 1 for colors
-	// 	glEnableVertexAttribArray(1);
-	// }
 
 	glGenBuffers( 1, &vboNormals ); // Generates 1 name for vbo normals
 	glBindBuffer( GL_ARRAY_BUFFER, vboNormals );

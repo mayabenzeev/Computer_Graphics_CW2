@@ -23,6 +23,7 @@
 #include "loadobj.hpp"
 #include "simple_mesh.hpp"
 
+#include <iostream>
 
 
 namespace
@@ -39,16 +40,18 @@ namespace
 		struct CamCtrl_
 		{
 			bool cameraActive;
-			bool actionMoveForward, actionMoveBackward, actionMoveLeft, actionMoveRight, actionMoveUp, actionMoveDown;
+			bool isForward, isBackward, isLeft, isRight, isUp, isDown;
 			bool actionSpeedUp, actionSlowDown;
 			
-			float phi, theta, movementSpeed =2.0f;
+			float phi, theta;
 			float radius;
-
-			Vec3f cameraPosition = {0.0f, 0.0f, 3.0f}; // Example: starting position
-    		Vec3f cameraForwardDirection = {0.0f, 0.0f, -1.0f}; // Facing into the screen
-    		Vec3f cameraUpDirection = {0.0f, 1.0f, 0.0f}; // Y is up
-    		Vec3f cameraRightDirection = {1.0f, 0.0f, 0.0f}; // X is right
+			float movementSpeed = kMovementPerSecond_;
+			
+			Vec3f cameraPosition = Vec3f(0.0f, 0.0f, 3.0f); // Starting position
+			Vec3f cameraForwardDirection = Vec3f(0.0f, 0.0f, -1.0f); // Initially facing along -Z
+			Vec3f cameraUpDirection = Vec3f(0.0f, 1.0f, 0.0f); // Y is up
+			Vec3f cameraRightDirection = Vec3f(1.0f, 0.0f, 0.0f); // X is right
+			Vec3f targetPosition;
 
 			float lastX, lastY;
 		} camControl;
@@ -60,6 +63,10 @@ namespace
 	void glfw_callback_key_( GLFWwindow*, int, int, int, int );
 	// *********
 	void glfw_callback_motion_( GLFWwindow*, double, double );
+	void glfw_callback_mouse_button_( GLFWwindow*, int, int, int );
+	void update_camera_position( State_::CamCtrl_&, float );
+	void update_camera_direction_vectors( State_::CamCtrl_&);
+
 	// **********
 
 	struct GLFWCleanupHelper
@@ -136,7 +143,7 @@ int main() try
 
 	glfwSetKeyCallback( window, &glfw_callback_key_ );
 	glfwSetCursorPosCallback( window, &glfw_callback_motion_ );
-
+	glfwSetMouseButtonCallback(window, &glfw_callback_mouse_button_);
 
 	// Set up drawing stuff
 	glfwMakeContextCurrent( window );
@@ -171,7 +178,6 @@ int main() try
 	// but not be part of the drawable surface area.
 	int iwidth, iheight;
 	glfwGetFramebufferSize( window, &iwidth, &iheight );
-
 	glViewport( 0, 0, iwidth, iheight );
 
 	// ************
@@ -183,12 +189,6 @@ int main() try
 
 	state.prog = &prog;
 	state.camControl.radius = 10.f;
-
-	// Animation state
-	auto last = Clock::now();
-
-	float angle = 0.f;
-	// ************
 
 	// Other initialization & loading
 	OGL_CHECKPOINT_ALWAYS();
@@ -206,13 +206,14 @@ int main() try
 
 
 	// ************
-	//TODO: VAO VBO
-
+	// Load Mesh
 	SimpleMeshData objMeshResult = load_wavefront_obj("assets/cw2/langerso.obj");
 	GLuint vao = create_vao(objMeshResult); // Returns a VAO pointer from the Attributes object
-
 	std::size_t numVertices = objMeshResult.positions.size() ; // Calculate the number of vertices to draw later
 
+
+	auto last = Clock::now();
+	// ************
 	// ************
 
 	// Main loop
@@ -251,67 +252,47 @@ int main() try
 		last = now;
 
 		// Update camera state
-		if( state.camControl.actionMoveForward )
-			state.camControl.cameraPosition += state.camControl.cameraForwardDirection * state.camControl.movementSpeed * dt;
-		else if( state.camControl.actionMoveBackward )
-			state.camControl.cameraPosition -= state.camControl.cameraForwardDirection * state.camControl.movementSpeed * dt;
-		else if (state.camControl.actionMoveLeft)
-    		state.camControl.cameraPosition -= state.camControl.cameraRightDirection * state.camControl.movementSpeed * dt;
-		else if (state.camControl.actionMoveRight)
-   			state.camControl.cameraPosition += state.camControl.cameraRightDirection * state.camControl.movementSpeed * dt;
-		else if (state.camControl.actionMoveUp)
-			state.camControl.cameraPosition += state.camControl.cameraUpDirection * state.camControl.movementSpeed * dt;
-		else if (state.camControl.actionMoveDown)
-			state.camControl.cameraPosition -= state.camControl.cameraUpDirection * state.camControl.movementSpeed * dt;
-
-
-		// if( state.camControl.radius <= 0.1f )
-		// 	state.camControl.radius = 0.1f;
+		update_camera_position(state.camControl, dt);
+        update_camera_direction_vectors(state.camControl);
 
 		// Update: compute transformation matrices
-		// Define the model2world matrix
-		Mat44f model2world = make_rotation_y(angle); // Angle updates per frame for spinning cube
+		// Define "View Matrix" (model2world) - transformation in world space 
+		Mat44f model2world = make_rotation_y(0.f); // Rotation around the Y axis 
 
-		// Define the world2camera matrix "arc-ball control set up"
-		Mat44f Rx = make_rotation_x(state.camControl.theta);
-		Mat44f Ry = make_rotation_y(state.camControl.phi);
+		// Define the camera rotation matrices
+		Mat44f Rx = make_rotation_x(state.camControl.theta); // Theta controls vertical rotation
+		Mat44f Ry = make_rotation_y(state.camControl.phi); // Phi controls the horizontal rotation
+		// Define the camera position in world space
 		Mat44f T = make_translation({ 0.f, 0.f, -state.camControl.radius });
+		// Create world to camera matrix by first translating and then rotating
 		Mat44f world2camera = T * Rx * Ry;
 
+		// Define "Projection Matrix" - Create 3D perspective in the camera's 2D view
 		Mat44f projection = make_perspective_projection( 60.f * std::numbers::pi_v<float> / 180.f, fbwidth/float(fbheight), 0.1f, 100.0f );
-		//Define and compute projCameraWorld matrix
+
+		// Define final transformation matrix - projCameraWorld matrix
 		Mat44f projCameraWorld = projection * world2camera * model2world;
+
 		Mat33f normalMatrix = mat44_to_mat33( transpose(invert(model2world)) );
 		// ************** from ex4
 
 		// Draw scene
 		OGL_CHECKPOINT_DEBUG();
-
-		// ************
-		//TODO: draw frame
-		// Clear color buffer to specified clear color (glClearColor())
-		// glClear( GL_COLOR_BUFFER_BIT ); // TODO: for basic 2D rendering but insufficient for 3D rendering.
 		glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );  // Resets also the depth values to the farthest dept 
-		// glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT );  // Resets also the depth values to the farthest dept and stencil testing 
-
+		
 		// Use shader program
 		glUseProgram( prog.programId() );
-
-		// Pass uniforms to the shaders
+		// set tranformation and normal matrices as uniforms to the shaders
 		glUniformMatrix4fv( 0, 1, GL_TRUE, projCameraWorld.v );	// projCameraWorld matrix 
 		glUniformMatrix3fv( 1, 1, GL_TRUE, normalMatrix.v); // Normal matrix
 		
-		// Pass uniforms for simplified (Blinn-)Phong shading
+		// Set lightning t o the shaders
 		Vec3f lightDir = normalize( Vec3f{ -1.f, 1.f, 0.5f } );
 		glUniform3fv( 2, 1, &lightDir.x );
-		// glUniform3f( 3, 0.9f, 0.9f, 0.6f );
-		glUniform3f( 3, 1.f, 1.f, 1.f );
-		glUniform3f( 4, 0.2f, 0.2f, 0.2f );
-		// glUniform3f( 4, 0.05f, 0.05f, 0.05f );
-
-		// Specify the base color and pass it to the shader
-		//static float const baseColor[] = { 0.2f, 1.f, 1.f };
-		//glUniform3fv(2, 1, baseColor); // location 2 in shader
+		// glUniform3f( 3, 0.9f, 0.9f, 0.6f ); // Yellow model
+		glUniform3f( 3, 1.f, 1.f, 1.f );  // White model
+		// glUniform3f( 4, 0.2f, 0.2f, 0.2f );  // Lighter Model
+		glUniform3f( 4, 0.05f, 0.05f, 0.05f );  // Darker Model
 
 		// Draw scene
 		glBindVertexArray( vao ); // Pass source input as defined in our VAO
@@ -349,7 +330,7 @@ namespace
 		std::fprintf( stderr, "GLFW error: %s (%d)\n", aErrDesc, aErrNum );
 	}
 
-	void glfw_callback_key_( GLFWwindow* aWindow, int aKey, int, int aAction, int mods)
+	void glfw_callback_key_( GLFWwindow* aWindow, int aKey, int, int aAction, int aMods)
 	{
 		if( GLFW_KEY_ESCAPE == aKey && GLFW_PRESS == aAction )
 		{
@@ -378,71 +359,46 @@ namespace
 				}
 			}
 
-			// Space toggles camera
-			if( GLFW_KEY_SPACE == aKey && GLFW_PRESS == aAction )
-			{
-				state->camControl.cameraActive = !state->camControl.cameraActive;
-
-				if( state->camControl.cameraActive )
-					glfwSetInputMode( aWindow, GLFW_CURSOR, GLFW_CURSOR_HIDDEN );
-				else
-					glfwSetInputMode( aWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL );
-			}
-
 			// Camera controls if camera is active
 			if( state->camControl.cameraActive )
 			{
-				if( GLFW_KEY_W == aKey )
+				std::cout << "Key pressed: " << aKey << " Action: " << aAction << std::endl;
+				if (GLFW_KEY_W == aKey)
 				{
-					if( GLFW_PRESS == aAction )
-						state->camControl.actionMoveForward = true;
-					else if( GLFW_RELEASE == aAction )
-						state->camControl.actionMoveForward = false;
+					state->camControl.isForward = (GLFW_PRESS == aAction);
+					std::cout << "isForward: " << state->camControl.isForward << std::endl;
+
 				}
-				else if( GLFW_KEY_S == aKey )
+				else if (GLFW_KEY_S == aKey)
 				{
-					if( GLFW_PRESS == aAction )
-						state->camControl.actionMoveBackward = true;
-					else if( GLFW_RELEASE == aAction )
-						state->camControl.actionMoveBackward = false;
-				}	
-				else if( GLFW_KEY_D == aKey )
-				{
-					if( GLFW_PRESS == aAction )
-						state->camControl.actionMoveRight = true;
-					else if( GLFW_RELEASE == aAction )
-						state->camControl.actionMoveRight = false;
+					state->camControl.isBackward = (GLFW_PRESS == aAction);
 				}
-				else if( GLFW_KEY_A == aKey )
+				else if (GLFW_KEY_D == aKey)
 				{
-					if( GLFW_PRESS == aAction )
-						state->camControl.actionMoveLeft = true;
-					else if( GLFW_RELEASE == aAction )
-						state->camControl.actionMoveLeft = false;
+					state->camControl.isRight = (GLFW_PRESS == aAction);
 				}
-				else if( GLFW_KEY_Q == aKey )
+				else if (GLFW_KEY_A == aKey)
 				{
-					if( GLFW_PRESS == aAction )
-						state->camControl.actionMoveDown = true;
-					else if( GLFW_RELEASE == aAction )
-						state->camControl.actionMoveDown = false;
+					state->camControl.isLeft = (GLFW_PRESS == aAction);
 				}
-				else if( GLFW_KEY_E == aKey )
+				else if (GLFW_KEY_Q == aKey)
 				{
-					if( GLFW_PRESS == aAction )
-						state->camControl.actionMoveUp = true;
-					else if( GLFW_RELEASE == aAction )
-						state->camControl.actionMoveUp = false;
+					state->camControl.isDown = (GLFW_PRESS == aAction);
 				}
-				
-				if ( GLFW_MOD_SHIFT == mods ) 
+				else if (GLFW_KEY_E == aKey)
+				{
+					state->camControl.isUp = (GLFW_PRESS == aAction);
+				}
+
+				// Controlling the speed
+				if ( GLFW_MOD_SHIFT == aMods ) 
 				{
 					if( GLFW_PRESS == aAction )
 						state->camControl.actionSpeedUp = true;
 					else if( GLFW_RELEASE == aAction )
 						state->camControl.actionSpeedUp = false;
         		} 
-				else if ( GLFW_MOD_CONTROL == mods ) 
+				else if ( GLFW_MOD_CONTROL == aMods ) 
 				{
             		if( GLFW_PRESS == aAction )
 						state->camControl.actionSlowDown = true;
@@ -452,6 +408,7 @@ namespace
 			}
 		}
 	}
+	
 
 	void glfw_callback_motion_( GLFWwindow* aWindow, double aX, double aY )
 	{
@@ -475,6 +432,88 @@ namespace
 			state->camControl.lastY = float(aY);
 		}
 	}
+
+	// ***********
+	void glfw_callback_mouse_button_( GLFWwindow* aWindow, int aButton, int aAction, int aMods )
+	{
+		if( auto* state = static_cast<State_*>(glfwGetWindowUserPointer( aWindow )) )
+		{
+			if ( GLFW_MOUSE_BUTTON_RIGHT == aButton && GLFW_PRESS == aAction )
+			{
+				state->camControl.cameraActive = !state->camControl.cameraActive;
+				std::cout << "Camera Active: " << state->camControl.cameraActive << std::endl;
+
+				if( state->camControl.cameraActive )
+					glfwSetInputMode( aWindow, GLFW_CURSOR, GLFW_CURSOR_HIDDEN );
+				else
+					glfwSetInputMode( aWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL );
+			}
+		}
+	}
+
+	void update_camera_position( State_::CamCtrl_ &aCamControl, float dt)
+	{
+		if (!aCamControl.cameraActive) return; // No movement if the camera is inactive
+    
+		// float movementSpeed = aCamControl.movementSpeed;
+
+		// Adjust Camera speeds
+		if ( aCamControl.actionSpeedUp )
+		{
+			aCamControl.movementSpeed *= 2.f; //TODO: Understand the movements
+			if (aCamControl.movementSpeed < 0.1f) aCamControl.movementSpeed = 0.1f; // Prevent speed from going to 0
+		}
+		else if ( aCamControl.actionSlowDown )
+		{
+			aCamControl.movementSpeed *= 0.5f;
+			if (aCamControl.movementSpeed < 0.1f) aCamControl.movementSpeed = 0.1f; // Prevent speed from going to 0
+
+		}
+		std::cout << "Movement speed: " << aCamControl.movementSpeed << std::endl;
+
+		// Adjust camera position
+		if ( aCamControl.isForward ){
+
+			aCamControl.cameraPosition += aCamControl.cameraForwardDirection * aCamControl.movementSpeed * dt;
+			std::cout << "Camera Position: " << aCamControl.cameraPosition.x << std::endl;
+			std::cout << "cameraForwardDirection: "
+					<< aCamControl.cameraForwardDirection.x << ", "
+					<< aCamControl.cameraForwardDirection.y << ", "
+					<< aCamControl.cameraForwardDirection.z
+					<< std::endl;
+			std::cout << "Camera movementSpeed: " << aCamControl.movementSpeed << std::endl;
+			std::cout << "dt: " << dt << std::endl;
+
+		}
+		if ( aCamControl.isBackward )
+			aCamControl.cameraPosition -= aCamControl.cameraForwardDirection * aCamControl.movementSpeed * dt;
+		if (aCamControl.isRight)
+   			aCamControl.cameraPosition += aCamControl.cameraRightDirection * aCamControl.movementSpeed * dt;
+		if (aCamControl.isLeft)
+    		aCamControl.cameraPosition -= aCamControl.cameraRightDirection * aCamControl.movementSpeed * dt;
+		if (aCamControl.isUp)
+			aCamControl.cameraPosition += aCamControl.cameraUpDirection * aCamControl.movementSpeed * dt;
+		if (aCamControl.isDown)
+			aCamControl.cameraPosition -= aCamControl.cameraUpDirection * aCamControl.movementSpeed * dt;
+		// if ( state.camControl.radius <= 0.1f )
+		// 	state.camControl.radius = 0.1f;
+	}
+
+	void update_camera_direction_vectors( State_::CamCtrl_ &aCamControl)
+	{
+		// Calculate the target position
+		Vec3f targetPosition = aCamControl.cameraPosition + aCamControl.cameraForwardDirection * aCamControl.radius;
+
+		Vec3f newForward = normalize(targetPosition - aCamControl.cameraPosition);
+		Vec3f newRight = normalize(cross(aCamControl.cameraUpDirection, newForward));
+		Vec3f newUp = normalize(cross(newForward, newRight));
+
+		// Update the camera vectors
+		aCamControl.cameraForwardDirection = newForward;
+		aCamControl.cameraRightDirection = newRight;
+		aCamControl.cameraUpDirection = newUp;
+	}
+	// ***********
 }
 namespace
 {
