@@ -22,6 +22,7 @@
 #include "defaults.hpp"
 #include "loadobj.hpp"
 #include "simple_mesh.hpp"
+#include "texture.hpp"
 
 #include <iostream>
 
@@ -193,10 +194,11 @@ int main() try
 
 	OGL_CHECKPOINT_ALWAYS();
 
-	// Load Mesh
-	SimpleMeshData objMeshResult = load_wavefront_obj("assets/cw2/langerso.obj");
+	
+	SimpleMeshData objMeshResult = load_wavefront_obj("assets/cw2/langerso.obj"); // Load Mesh
 	GLuint vao = create_vao(objMeshResult); // Returns a VAO pointer from the Attributes object
 	std::size_t numVertices = objMeshResult.positions.size() ; // Calculate the number of vertices to draw later
+	GLuint textureID = load_texture_2d("assets/cw2/L3211E-4k.jpg");  // Load Texture
 
 	// Main loop
 	while( !glfwWindowShouldClose( window ) )
@@ -266,11 +268,10 @@ int main() try
 		
 		// Use shader program
 		glUseProgram( prog.programId() );
-		// set tranformation and normal matrices as uniforms to the shaders
-		glUniformMatrix4fv( 0, 1, GL_TRUE, projCameraWorld.v );	// projCameraWorld matrix 
+		glUniformMatrix4fv( 0, 1, GL_TRUE, projCameraWorld.v );	// tranformation matrix 
 		glUniformMatrix3fv( 1, 1, GL_TRUE, normalMatrix.v); // Normal matrix
 		
-		// Set lightning t o the shaders
+		// Set lightning to the shaders
 		Vec3f lightDir = normalize( Vec3f{ -1.f, 1.f, 0.5f } );
 		glUniform3fv( 2, 1, &lightDir.x );
 		// glUniform3f( 3, 0.9f, 0.9f, 0.6f ); // Yellow model
@@ -278,6 +279,9 @@ int main() try
 		// glUniform3f( 4, 0.2f, 0.2f, 0.2f );  // Lighter Model
 		glUniform3f( 4, 0.05f, 0.05f, 0.05f );  // Darker Model
 
+		glActiveTexture( GL_TEXTURE0 );  // Activate the 0 texture unit
+		glBindTexture( GL_TEXTURE_2D, textureID ); // Bind the loaded texture
+		// glUniform1i( glGetUniformLocation(prog.programId(), "texture1"), 0 ); // Tell the shader where it will find the texture
 		// Draw scene
 		glBindVertexArray( vao ); // Pass source input as defined in our VAO
 		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
@@ -346,7 +350,6 @@ namespace
 			// Camera controls if camera is active
 			if( state->camControl.cameraActive )
 			{
-				std::cout << "Key pressed: " << aKey << " Action: " << aAction << std::endl;
 				if (GLFW_KEY_W == aKey )
 					state->camControl.isForward = (GLFW_PRESS == aAction);
 				else if (GLFW_KEY_S == aKey)
@@ -421,24 +424,10 @@ namespace
 			aCamControl.movementSpeed = std::min(aCamControl.movementSpeed * 1.1f, 10.0f); // Prevent speed from going too fast
 		else if (aCamControl.actionSlowDown) 
 			aCamControl.movementSpeed = std::max(aCamControl.movementSpeed * 0.9f, 0.1f); // Prevent speed from going to 0
-	
-		std::cout << "Movement speed: " << aCamControl.movementSpeed << std::endl;
 
 		// Adjust camera position
-		if ( aCamControl.isForward ){
-
+		if ( aCamControl.isForward )
 			aCamControl.cameraPosition += aCamControl.cameraForwardDirection * aCamControl.movementSpeed * dt;
-
-			std::cout << "Camera Position: " << aCamControl.cameraPosition.x << std::endl;
-			std::cout << "cameraForwardDirection: "
-					<< aCamControl.cameraForwardDirection.x << ", "
-					<< aCamControl.cameraForwardDirection.y << ", "
-					<< aCamControl.cameraForwardDirection.z
-					<< std::endl;
-			std::cout << "Camera movementSpeed: " << aCamControl.movementSpeed << std::endl;
-			std::cout << "dt: " << dt << std::endl;
-
-		}
 		if ( aCamControl.isBackward )
 			aCamControl.cameraPosition -= aCamControl.cameraForwardDirection * aCamControl.movementSpeed * dt;
 		if (aCamControl.isRight)

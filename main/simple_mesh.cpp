@@ -5,14 +5,14 @@ SimpleMeshData concatenate( SimpleMeshData aM, SimpleMeshData const& aN )
 	aM.positions.insert( aM.positions.end(), aN.positions.begin(), aN.positions.end() );
 	aM.colors.insert( aM.colors.end(), aN.colors.begin(), aN.colors.end() );
 	aM.normals.insert( aM.normals.end(), aN.normals.begin(), aN.normals.end() );
+	aM.texcoords.insert( aM.texcoords.end(), aN.texcoords.begin(), aN.texcoords.end() );
 	return aM;
 }
 
 
 GLuint create_vao( SimpleMeshData const& aMeshData )
 {
-	GLuint vboPositions, vboColors, vboNormals;
-	// , vboTexcoords, vboNormals;
+	GLuint vboPositions, vboColors, vboNormals, vboTexcoords;
 	
 	GLuint vao = 0;
 	glGenVertexArrays( 1, &vao );
@@ -45,7 +45,7 @@ GLuint create_vao( SimpleMeshData const& aMeshData )
 	);
 	glEnableVertexAttribArray( 1 );
 
-
+	// Normals VBO
 	glGenBuffers( 1, &vboNormals ); // Generates 1 name for vbo normals
 	glBindBuffer( GL_ARRAY_BUFFER, vboNormals );
 	glBufferData( GL_ARRAY_BUFFER, sizeof(Vec3f) * aMeshData.normals.size(), aMeshData.normals.data(), GL_STATIC_DRAW ); // Allocate and store data
@@ -57,20 +57,17 @@ GLuint create_vao( SimpleMeshData const& aMeshData )
 	);
 	glEnableVertexAttribArray( 2 );
 
-
-	// if ( !result.attributes.texcoords.empty() ) 
-	// {
-	// 	glGenBuffers( 1, &vboTexcoords ); // Generates 1 name for vbo textures
-	// 	glBindBuffer( GL_ARRAY_BUFFER, vboTexcoords) ;
-	// 	glBufferData( GL_ARRAY_BUFFER, sizeof(float) * result.attributes.texcoords.size(), result.attributes.texcoords.data(), GL_STATIC_DRAW ); // Allocate and store data
-	// 		glVertexAttribPointer(
-	// 		3, // location = 3 in vertex shader
-	// 		2, GL_FLOAT, GL_FALSE, // 2 floats, not normalized to [0..1] (GL FALSE)
-	// 		0, // stride = 0 indicates that there is no padding between inputs
-	// 		0 // data starts at offset 0 in the VBO.
-	// 	);
-	// 	glEnableVertexAttribArray( 3 );
-	// }
+	// Textures VBO
+	glGenBuffers( 1, &vboTexcoords ); // Generates 1 name for vbo textures
+	glBindBuffer( GL_ARRAY_BUFFER, vboTexcoords) ;
+	glBufferData( GL_ARRAY_BUFFER, sizeof(Vec2f) * aMeshData.texcoords.size(), aMeshData.texcoords.data(), GL_STATIC_DRAW ); // Allocate and store data
+	glVertexAttribPointer(
+	3, // location = 3 in vertex shader
+	2, GL_FLOAT, GL_FALSE, // 2 floats, not normalized to [0..1] (GL FALSE)
+	0, // stride = 0 indicates that there is no padding between inputs
+	0 // data starts at offset 0 in the VBO.
+	);
+	glEnableVertexAttribArray( 3 );
 
 
 
