@@ -29,7 +29,6 @@
 namespace
 {
 	constexpr char const* kWindowTitle = "COMP3811 - CW2";
-	// ************
 
 	constexpr float kMovementPerSecond_ = 5.0f; // units per second
 	constexpr float kMouseSensitivity_ = 0.01f; // radians per pixel
@@ -47,10 +46,10 @@ namespace
 			float radius;
 			float movementSpeed = kMovementPerSecond_;
 			
-			Vec3f cameraPosition = Vec3f(0.0f, 0.0f, 3.0f); // Starting position
-			Vec3f cameraForwardDirection = Vec3f(0.0f, 0.0f, -1.0f); // Initially facing along -Z
-			Vec3f cameraUpDirection = Vec3f(0.0f, 1.0f, 0.0f); // Y is up
-			Vec3f cameraRightDirection = Vec3f(1.0f, 0.0f, 0.0f); // X is right
+			Vec3f cameraPosition = Vec3f{0.0f, 0.0f, 10.0f}; // Starting position
+			Vec3f cameraForwardDirection = Vec3f{0.0f, 0.0f, -1.0f}; // Initially facing along -Z
+			Vec3f cameraUpDirection = Vec3f{0.0f, 1.0f, 0.0f}; // Y is up
+			Vec3f cameraRightDirection = Vec3f{1.0f, 0.0f, 0.0f}; // X is right
 			Vec3f targetPosition;
 
 			float lastX, lastY;
@@ -59,15 +58,11 @@ namespace
 
 	
 	void glfw_callback_error_( int, char const* );
-
 	void glfw_callback_key_( GLFWwindow*, int, int, int, int );
-	// *********
 	void glfw_callback_motion_( GLFWwindow*, double, double );
 	void glfw_callback_mouse_button_( GLFWwindow*, int, int, int );
 	void update_camera_position( State_::CamCtrl_&, float );
 	void update_camera_direction_vectors( State_::CamCtrl_&);
-
-	// **********
 
 	struct GLFWCleanupHelper
 	{
@@ -134,13 +129,8 @@ int main() try
 
 
 	// Set up event handling
-	// ************
 	State_ state{};
-
 	glfwSetWindowUserPointer( window, &state );
-	// **********
-	// TODO: Additional event handling setup
-
 	glfwSetKeyCallback( window, &glfw_callback_key_ );
 	glfwSetCursorPosCallback( window, &glfw_callback_motion_ );
 	glfwSetMouseButtonCallback(window, &glfw_callback_mouse_button_);
@@ -167,11 +157,6 @@ int main() try
 	// Global GL state
 	OGL_CHECKPOINT_ALWAYS();
 
-	// TODO: global GL setup goes here
-
-
-	OGL_CHECKPOINT_ALWAYS();
-
 	// Get actual framebuffer size.
 	// This can be different from the window size, as standard window
 	// decorations (title bar, borders, ...) may be included in the window size
@@ -180,7 +165,7 @@ int main() try
 	glfwGetFramebufferSize( window, &iwidth, &iheight );
 	glViewport( 0, 0, iwidth, iheight );
 
-	// ************
+
 	// Load shader program
 	ShaderProgram prog( {
 		{ GL_VERTEX_SHADER, "assets/cw2/default.vert" },
@@ -190,31 +175,28 @@ int main() try
 	state.prog = &prog;
 	state.camControl.radius = 10.f;
 
+	// Animation state
+	auto last = Clock::now();
+
+	float angle = 0.f;
+	
 	// Other initialization & loading
 	OGL_CHECKPOINT_ALWAYS();
 	
-	// TODO: global GL setup goes here
-	// ******************
+	// global GL setup 
 	glEnable( GL_FRAMEBUFFER_SRGB ); // enables automatic sRGB conversion of colors
 	glEnable( GL_CULL_FACE ); // Enable face culling
 	// glFrontFace(GL_CCW); 
 	glEnable( GL_DEPTH_TEST ); // Enable depth testing
 	glClearColor( 0.2f, 0.2f, 0.2f, 0.0f ); // Sets the clear color to dark gray 
-	// ******************
+
 
 	OGL_CHECKPOINT_ALWAYS();
 
-
-	// ************
 	// Load Mesh
 	SimpleMeshData objMeshResult = load_wavefront_obj("assets/cw2/langerso.obj");
 	GLuint vao = create_vao(objMeshResult); // Returns a VAO pointer from the Attributes object
 	std::size_t numVertices = objMeshResult.positions.size() ; // Calculate the number of vertices to draw later
-
-
-	auto last = Clock::now();
-	// ************
-	// ************
 
 	// Main loop
 	while( !glfwWindowShouldClose( window ) )
@@ -246,10 +228,13 @@ int main() try
 		}
 
 		// Update state
-		// ************** from ex4
 		auto const now = Clock::now();
 		float dt = std::chrono::duration_cast<Secondsf>(now-last).count();
 		last = now;
+
+		angle += dt * std::numbers::pi_v<float> * 0.3f;
+		if( angle >= 2.f*std::numbers::pi_v<float> )
+			angle -= 2.f*std::numbers::pi_v<float>;
 
 		// Update camera state
 		update_camera_position(state.camControl, dt);
@@ -263,9 +248,9 @@ int main() try
 		Mat44f Rx = make_rotation_x(state.camControl.theta); // Theta controls vertical rotation
 		Mat44f Ry = make_rotation_y(state.camControl.phi); // Phi controls the horizontal rotation
 		// Define the camera position in world space
-		Mat44f T = make_translation({ 0.f, 0.f, -state.camControl.radius });
+		Mat44f T = make_translation({state.camControl.cameraPosition.x, state.camControl.cameraPosition.y, state.camControl.cameraPosition.z});
 		// Create world to camera matrix by first translating and then rotating
-		Mat44f world2camera = T * Rx * Ry;
+		Mat44f world2camera = Rx * Ry * T;
 
 		// Define "Projection Matrix" - Create 3D perspective in the camera's 2D view
 		Mat44f projection = make_perspective_projection( 60.f * std::numbers::pi_v<float> / 180.f, fbwidth/float(fbheight), 0.1f, 100.0f );
@@ -274,7 +259,6 @@ int main() try
 		Mat44f projCameraWorld = projection * world2camera * model2world;
 
 		Mat33f normalMatrix = mat44_to_mat33( transpose(invert(model2world)) );
-		// ************** from ex4
 
 		// Draw scene
 		OGL_CHECKPOINT_DEBUG();
@@ -298,10 +282,10 @@ int main() try
 		glBindVertexArray( vao ); // Pass source input as defined in our VAO
 		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 		glDrawArrays( GL_TRIANGLES, 0, numVertices ); // Draw <numVertices> vertices , starting at index 0
+		
 		// Reset state
 		glBindVertexArray( 0 );
-		glUseProgram( 0 );
-		// ************
+		glUseProgram( 0 );	
 
 		OGL_CHECKPOINT_DEBUG();
 
@@ -330,12 +314,12 @@ namespace
 		std::fprintf( stderr, "GLFW error: %s (%d)\n", aErrDesc, aErrNum );
 	}
 
-	void glfw_callback_key_( GLFWwindow* aWindow, int aKey, int, int aAction, int aMods)
+	void glfw_callback_key_( GLFWwindow* aWindow, int aKey, int, int aAction, int)
 	{
 		if( GLFW_KEY_ESCAPE == aKey && GLFW_PRESS == aAction )
 		{
 			glfwSetWindowShouldClose( aWindow, GLFW_TRUE );
-			return;
+			return;	
 		}
 
 		if( auto* state = static_cast<State_*>(glfwGetWindowUserPointer( aWindow )) )
@@ -363,48 +347,25 @@ namespace
 			if( state->camControl.cameraActive )
 			{
 				std::cout << "Key pressed: " << aKey << " Action: " << aAction << std::endl;
-				if (GLFW_KEY_W == aKey)
-				{
+				if (GLFW_KEY_W == aKey )
 					state->camControl.isForward = (GLFW_PRESS == aAction);
-					std::cout << "isForward: " << state->camControl.isForward << std::endl;
-
-				}
 				else if (GLFW_KEY_S == aKey)
-				{
 					state->camControl.isBackward = (GLFW_PRESS == aAction);
-				}
 				else if (GLFW_KEY_D == aKey)
-				{
 					state->camControl.isRight = (GLFW_PRESS == aAction);
-				}
 				else if (GLFW_KEY_A == aKey)
-				{
 					state->camControl.isLeft = (GLFW_PRESS == aAction);
-				}
 				else if (GLFW_KEY_Q == aKey)
-				{
 					state->camControl.isDown = (GLFW_PRESS == aAction);
-				}
 				else if (GLFW_KEY_E == aKey)
-				{
 					state->camControl.isUp = (GLFW_PRESS == aAction);
-				}
 
 				// Controlling the speed
-				if ( GLFW_MOD_SHIFT == aMods ) 
-				{
-					if( GLFW_PRESS == aAction )
-						state->camControl.actionSpeedUp = true;
-					else if( GLFW_RELEASE == aAction )
-						state->camControl.actionSpeedUp = false;
-        		} 
-				else if ( GLFW_MOD_CONTROL == aMods ) 
-				{
-            		if( GLFW_PRESS == aAction )
-						state->camControl.actionSlowDown = true;
-					else if( GLFW_RELEASE == aAction )
-						state->camControl.actionSlowDown = false;
-        		}
+				if ( GLFW_KEY_LEFT_SHIFT == aKey ||  GLFW_KEY_RIGHT_SHIFT == aKey ) 
+					state->camControl.actionSpeedUp = (GLFW_PRESS == aAction);
+				else if ( GLFW_KEY_LEFT_CONTROL == aKey ||  GLFW_KEY_RIGHT_CONTROL == aKey ) 
+					state->camControl.actionSlowDown = (GLFW_PRESS == aAction);
+			
 			}
 		}
 	}
@@ -420,8 +381,8 @@ namespace
 				auto const dy = float(aY-state->camControl.lastY);
 
 				state->camControl.phi += dx*kMouseSensitivity_;
-				
 				state->camControl.theta += dy*kMouseSensitivity_;
+
 				if( state->camControl.theta > std::numbers::pi_v<float>/2.f )
 					state->camControl.theta = std::numbers::pi_v<float>/2.f;
 				else if( state->camControl.theta < -std::numbers::pi_v<float>/2.f )
@@ -455,26 +416,19 @@ namespace
 	{
 		if (!aCamControl.cameraActive) return; // No movement if the camera is inactive
     
-		// float movementSpeed = aCamControl.movementSpeed;
-
 		// Adjust Camera speeds
-		if ( aCamControl.actionSpeedUp )
-		{
-			aCamControl.movementSpeed *= 2.f; //TODO: Understand the movements
-			if (aCamControl.movementSpeed < 0.1f) aCamControl.movementSpeed = 0.1f; // Prevent speed from going to 0
-		}
-		else if ( aCamControl.actionSlowDown )
-		{
-			aCamControl.movementSpeed *= 0.5f;
-			if (aCamControl.movementSpeed < 0.1f) aCamControl.movementSpeed = 0.1f; // Prevent speed from going to 0
-
-		}
+		if ( aCamControl.actionSpeedUp ) 
+			aCamControl.movementSpeed = std::min(aCamControl.movementSpeed * 1.1f, 10.0f); // Prevent speed from going too fast
+		else if (aCamControl.actionSlowDown) 
+			aCamControl.movementSpeed = std::max(aCamControl.movementSpeed * 0.9f, 0.1f); // Prevent speed from going to 0
+	
 		std::cout << "Movement speed: " << aCamControl.movementSpeed << std::endl;
 
 		// Adjust camera position
 		if ( aCamControl.isForward ){
 
 			aCamControl.cameraPosition += aCamControl.cameraForwardDirection * aCamControl.movementSpeed * dt;
+
 			std::cout << "Camera Position: " << aCamControl.cameraPosition.x << std::endl;
 			std::cout << "cameraForwardDirection: "
 					<< aCamControl.cameraForwardDirection.x << ", "
@@ -501,20 +455,45 @@ namespace
 
 	void update_camera_direction_vectors( State_::CamCtrl_ &aCamControl)
 	{
-		// Calculate the target position
-		Vec3f targetPosition = aCamControl.cameraPosition + aCamControl.cameraForwardDirection * aCamControl.radius;
+		// // Calculate the target position
+		// Vec3f targetPosition = aCamControl.cameraPosition + aCamControl.cameraForwardDirection * aCamControl.radius;
 
-		Vec3f newForward = normalize(targetPosition - aCamControl.cameraPosition);
-		Vec3f newRight = normalize(cross(aCamControl.cameraUpDirection, newForward));
-		Vec3f newUp = normalize(cross(newForward, newRight));
+		// Vec3f newForward = normalize(targetPosition - aCamControl.cameraPosition);
+		// Vec3f newRight = normalize(cross(aCamControl.cameraUpDirection, newForward));
+		// Vec3f newUp = normalize(cross(newForward, newRight));
 
-		// Update the camera vectors
-		aCamControl.cameraForwardDirection = newForward;
-		aCamControl.cameraRightDirection = newRight;
-		aCamControl.cameraUpDirection = newUp;
+		// // Update the camera vectors
+		// aCamControl.cameraForwardDirection = newForward;
+		// aCamControl.cameraRightDirection = newRight;
+		// aCamControl.cameraUpDirection = newUp;
+
+		float sinTheta = sin(aCamControl.theta);
+		float cosTheta = cos(aCamControl.theta);
+		float sinPhi = sin(aCamControl.phi);
+		float cosPhi = cos(aCamControl.phi);
+
+		aCamControl.cameraForwardDirection = Vec3f(
+			cosTheta * sinPhi,
+			sinTheta,
+			cosTheta * cosPhi
+		);
+
+		aCamControl.cameraRightDirection = Vec3f(
+			sin(aCamControl.phi + std::numbers::pi_v<float> / 2),
+			0,
+			cos(aCamControl.phi + std::numbers::pi_v<float> / 2)
+		);
+		// aCamControl.cameraRightDirection = Vec3f(
+		// 	cos(aCamControl.phi + std::numbers::pi_v<float> / 2),
+		// 	0,
+		// 	sin(aCamControl.phi + std::numbers::pi_v<float> / 2)
+		// );
+
+		aCamControl.cameraUpDirection = cross(aCamControl.cameraForwardDirection, aCamControl.cameraRightDirection);
+		aCamControl.cameraUpDirection = normalize(aCamControl.cameraUpDirection); // Ensure it remains a unit vector
 	}
-	// ***********
 }
+
 namespace
 {
 	GLFWCleanupHelper::~GLFWCleanupHelper()
