@@ -249,8 +249,9 @@ int main() try
 		// Define the camera rotation matrices
 		Mat44f Rx = make_rotation_x(state.camControl.theta); // Theta controls vertical rotation
 		Mat44f Ry = make_rotation_y(state.camControl.phi); // Phi controls the horizontal rotation
+
 		// Define the camera position in world space
-		Mat44f T = make_translation({state.camControl.cameraPosition.x, state.camControl.cameraPosition.y, state.camControl.cameraPosition.z});
+		Mat44f T = make_translation({state.camControl.cameraPosition.x, state.camControl.cameraPosition.y, -state.camControl.cameraPosition.z});
 		// Create world to camera matrix by first translating and then rotating
 		Mat44f world2camera = Rx * Ry * T;
 
@@ -346,28 +347,28 @@ namespace
 					}
 				}
 			}
-
+	
 			// Camera controls if camera is active
 			if( state->camControl.cameraActive )
-			{
-				if (GLFW_KEY_W == aKey )
-					state->camControl.isForward = (GLFW_PRESS == aAction);
+			{	
+				if ( GLFW_KEY_W == aKey )
+					state->camControl.isForward = (GLFW_PRESS == aAction || GLFW_REPEAT == aAction );
 				else if (GLFW_KEY_S == aKey)
-					state->camControl.isBackward = (GLFW_PRESS == aAction);
+					state->camControl.isBackward = (GLFW_PRESS == aAction || GLFW_REPEAT == aAction );
 				else if (GLFW_KEY_D == aKey)
-					state->camControl.isRight = (GLFW_PRESS == aAction);
+					state->camControl.isRight = (GLFW_PRESS == aAction || GLFW_REPEAT == aAction );
 				else if (GLFW_KEY_A == aKey)
-					state->camControl.isLeft = (GLFW_PRESS == aAction);
+					state->camControl.isLeft = (GLFW_PRESS == aAction || GLFW_REPEAT == aAction );
 				else if (GLFW_KEY_Q == aKey)
-					state->camControl.isDown = (GLFW_PRESS == aAction);
+					state->camControl.isDown = (GLFW_PRESS == aAction || GLFW_REPEAT == aAction );
 				else if (GLFW_KEY_E == aKey)
-					state->camControl.isUp = (GLFW_PRESS == aAction);
+					state->camControl.isUp = (GLFW_PRESS == aAction || GLFW_REPEAT == aAction );
 
 				// Controlling the speed
 				if ( GLFW_KEY_LEFT_SHIFT == aKey ||  GLFW_KEY_RIGHT_SHIFT == aKey ) 
-					state->camControl.actionSpeedUp = (GLFW_PRESS == aAction);
+					state->camControl.actionSpeedUp = (GLFW_PRESS == aAction || GLFW_REPEAT == aAction );
 				else if ( GLFW_KEY_LEFT_CONTROL == aKey ||  GLFW_KEY_RIGHT_CONTROL == aKey ) 
-					state->camControl.actionSlowDown = (GLFW_PRESS == aAction);
+					state->camControl.actionSlowDown = (GLFW_PRESS == aAction || GLFW_REPEAT == aAction );
 			
 			}
 		}
@@ -414,7 +415,6 @@ namespace
 			}
 		}
 	}
-
 	void update_camera_position( State_::CamCtrl_ &aCamControl, float dt)
 	{
 		if (!aCamControl.cameraActive) return; // No movement if the camera is inactive
@@ -426,8 +426,11 @@ namespace
 			aCamControl.movementSpeed = std::max(aCamControl.movementSpeed * 0.9f, 0.1f); // Prevent speed from going to 0
 
 		// Adjust camera position
-		if ( aCamControl.isForward )
+		if ( aCamControl.isForward ){
 			aCamControl.cameraPosition += aCamControl.cameraForwardDirection * aCamControl.movementSpeed * dt;
+			std::cout << "Camera Position: " << aCamControl.cameraPosition.x<<", " << aCamControl.cameraPosition.y<<", "<<aCamControl.cameraPosition.z<<std::endl;
+
+			}
 		if ( aCamControl.isBackward )
 			aCamControl.cameraPosition -= aCamControl.cameraForwardDirection * aCamControl.movementSpeed * dt;
 		if (aCamControl.isRight)
@@ -444,7 +447,8 @@ namespace
 
 	void update_camera_direction_vectors( State_::CamCtrl_ &aCamControl)
 	{
-		// // Calculate the target position
+		// Calculate the target position
+		
 		// Vec3f targetPosition = aCamControl.cameraPosition + aCamControl.cameraForwardDirection * aCamControl.radius;
 
 		// Vec3f newForward = normalize(targetPosition - aCamControl.cameraPosition);
@@ -461,25 +465,19 @@ namespace
 		float sinPhi = sin(aCamControl.phi);
 		float cosPhi = cos(aCamControl.phi);
 
-		aCamControl.cameraForwardDirection = Vec3f(
-			cosTheta * sinPhi,
+		aCamControl.cameraForwardDirection = normalize(Vec3f(
+			-cosTheta * sinPhi,
 			sinTheta,
-			cosTheta * cosPhi
-		);
+			-cosTheta * cosPhi
+		));
 
-		aCamControl.cameraRightDirection = Vec3f(
-			sin(aCamControl.phi + std::numbers::pi_v<float> / 2),
+		aCamControl.cameraRightDirection = normalize(Vec3f(
+			-sin(aCamControl.phi + std::numbers::pi_v<float> / 2),
 			0,
-			cos(aCamControl.phi + std::numbers::pi_v<float> / 2)
-		);
-		// aCamControl.cameraRightDirection = Vec3f(
-		// 	cos(aCamControl.phi + std::numbers::pi_v<float> / 2),
-		// 	0,
-		// 	sin(aCamControl.phi + std::numbers::pi_v<float> / 2)
-		// );
-
-		aCamControl.cameraUpDirection = cross(aCamControl.cameraForwardDirection, aCamControl.cameraRightDirection);
-		aCamControl.cameraUpDirection = normalize(aCamControl.cameraUpDirection); // Ensure it remains a unit vector
+			-cos(aCamControl.phi + std::numbers::pi_v<float> / 2)
+		));
+	
+		aCamControl.cameraUpDirection = normalize(cross(aCamControl.cameraForwardDirection, aCamControl.cameraRightDirection));
 	}
 }
 
