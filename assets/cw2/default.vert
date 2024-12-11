@@ -22,8 +22,5 @@ void main() {
     // Transform the input vertex position into clip space
     gl_Position = uModelViewProjection * vec4(iPosition.xyz, 1.0);
 
-    // Pass the color, normal, and texture coordinates to the fragment shader
     v2fColor = iColor;
-    
-    
 }

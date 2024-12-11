@@ -65,14 +65,16 @@ endif
 GENERATED :=
 OBJECTS :=
 
+GENERATED += $(OBJDIR)/load_texture.o
 GENERATED += $(OBJDIR)/loadobj.o
 GENERATED += $(OBJDIR)/main.o
+GENERATED += $(OBJDIR)/set_shaders.o
 GENERATED += $(OBJDIR)/simple_mesh.o
-GENERATED += $(OBJDIR)/texture.o
+OBJECTS += $(OBJDIR)/load_texture.o
 OBJECTS += $(OBJDIR)/loadobj.o
 OBJECTS += $(OBJDIR)/main.o
+OBJECTS += $(OBJDIR)/set_shaders.o
 OBJECTS += $(OBJDIR)/simple_mesh.o
-OBJECTS += $(OBJDIR)/texture.o
 
 # Rules
 # #############################################
@@ -136,16 +138,19 @@ endif
 # File Rules
 # #############################################
 
+$(OBJDIR)/load_texture.o: load_texture.cpp
+	@echo $(notdir $<)
+	$(SILENT) $(CXX) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
 $(OBJDIR)/loadobj.o: loadobj.cpp
 	@echo $(notdir $<)
 	$(SILENT) $(CXX) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
 $(OBJDIR)/main.o: main.cpp
 	@echo $(notdir $<)
 	$(SILENT) $(CXX) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
-$(OBJDIR)/simple_mesh.o: simple_mesh.cpp
+$(OBJDIR)/set_shaders.o: set_shaders.cpp
 	@echo $(notdir $<)
 	$(SILENT) $(CXX) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
-$(OBJDIR)/texture.o: texture.cpp
+$(OBJDIR)/simple_mesh.o: simple_mesh.cpp
 	@echo $(notdir $<)
 	$(SILENT) $(CXX) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
 

@@ -22,7 +22,8 @@
 #include "defaults.hpp"
 #include "loadobj.hpp"
 #include "simple_mesh.hpp"
-#include "texture.hpp"
+#include "load_texture.hpp"
+#include "set_shaders.hpp"
 
 #include <iostream>
 
@@ -33,9 +34,12 @@ namespace
 
 	constexpr float kMovementPerSecond_ = 5.0f; // units per second
 	constexpr float kMouseSensitivity_ = 0.01f; // radians per pixel
+	constexpr Vec3f kLandpadPosition1_ = {5.f, 0.f, -5.f}; // Placed on the sea - y-axis is 0
+	constexpr Vec3f kLandpadPosition2_ = {-2.1f, 0.0f, 1.1f};
 	struct State_
 	{
-		ShaderProgram* prog;
+		ShaderProgram* progTexture;
+		ShaderProgram* progNonTexture;
 		
 		struct CamCtrl_
 		{
@@ -44,7 +48,7 @@ namespace
 			bool actionSpeedUp, actionSlowDown;
 			
 			float phi, theta;
-			float radius;
+			// float radius;
 			float movementSpeed = kMovementPerSecond_;
 			
 			Vec3f cameraPosition = Vec3f{0.0f, 0.0f, 10.0f}; // Starting position
@@ -166,16 +170,6 @@ int main() try
 	glfwGetFramebufferSize( window, &iwidth, &iheight );
 	glViewport( 0, 0, iwidth, iheight );
 
-
-	// Load shader program
-	ShaderProgram prog( {
-		{ GL_VERTEX_SHADER, "assets/cw2/default.vert" },
-		{ GL_FRAGMENT_SHADER, "assets/cw2/default.frag" }
-	} );
-
-	state.prog = &prog;
-	state.camControl.radius = 10.f;
-
 	// Animation state
 	auto last = Clock::now();
 
@@ -194,10 +188,33 @@ int main() try
 
 	OGL_CHECKPOINT_ALWAYS();
 
+		// Load shader program
+	ShaderProgram progTexture( {
+		{ GL_VERTEX_SHADER, "assets/cw2/default.vert" },
+		{ GL_FRAGMENT_SHADER, "assets/cw2/textured_objects.frag" }
+	} );
+
+	ShaderProgram progNonTexture( {
+		{ GL_VERTEX_SHADER, "assets/cw2/default.vert" },
+		{ GL_FRAGMENT_SHADER, "assets/cw2/non_textured_objects.frag" }
+	} );
+
+	state.progTexture = &progTexture;
+	state.progNonTexture = &progNonTexture;
+	// state.camControl.radius = 10.f;
+
+	SimpleMeshData langersoMesh = load_wavefront_obj("assets/cw2/langerso.obj"); // Load Mesh
+	GLuint langersoVAO = create_vao(langersoMesh); // Returns a VAO pointer from the Attributes object
+	std::size_t langersoVertices = langersoMesh.positions.size() ; // Calculate the number of vertices to draw later
+
+	SimpleMeshData landingpadMesh = load_wavefront_obj("assets/cw2/landingpad.obj"); // Load Mesh
+	GLuint landingpadVAO = create_vao(landingpadMesh); // Returns a VAO pointer from the Attributes object
+	std::size_t landingpadVertices = landingpadMesh.positions.size() ; // Calculate the number of vertices to draw later
+
+	// Landing pad position
+	Vec3f launchpadPosition1 = kLandpadPosition1_;
+	Vec3f launchpadPosition2 = kLandpadPosition2_;
 	
-	SimpleMeshData objMeshResult = load_wavefront_obj("assets/cw2/langerso.obj"); // Load Mesh
-	GLuint vao = create_vao(objMeshResult); // Returns a VAO pointer from the Attributes object
-	std::size_t numVertices = objMeshResult.positions.size() ; // Calculate the number of vertices to draw later
 	GLuint textureID = load_texture_2d("assets/cw2/L3211E-4k.jpg");  // Load Texture
 
 	// Main loop
@@ -229,6 +246,8 @@ int main() try
 			glViewport( 0, 0, nwidth, nheight );
 		}
 
+		glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );  // Resets also the depth values to the farthest dept 
+
 		// Update state
 		auto const now = Clock::now();
 		float dt = std::chrono::duration_cast<Secondsf>(now-last).count();
@@ -243,50 +262,42 @@ int main() try
         update_camera_direction_vectors(state.camControl);
 
 		// Update: compute transformation matrices
-		// Define "View Matrix" (model2world) - transformation in world space 
-		Mat44f model2world = make_rotation_y(0.f); // Rotation around the Y axis 
-
 		// Define the camera rotation matrices
 		Mat44f Rx = make_rotation_x(state.camControl.theta); // Theta controls vertical rotation
-		Mat44f Ry = make_rotation_y(state.camControl.phi); // Phi controls the horizontal rotation
+		Mat44f Ry = make_rotation_y(state.camControl.phi); // Phi controls the horizontal rotation		
 
-		// Define the camera position in world space
-		Mat44f T = make_translation({state.camControl.cameraPosition.x, state.camControl.cameraPosition.y, -state.camControl.cameraPosition.z});
-		// Create world to camera matrix by first translating and then rotating
-		Mat44f world2camera = Rx * Ry * T;
+		// transformation for langerso
+		Mat44f T = make_translation({state.camControl.cameraPosition.x, state.camControl.cameraPosition.y, -state.camControl.cameraPosition.z}); // Define the camera position in world space
+		Mat44f world2camera = Rx * Ry * T; // Create world to camera matrix by first translating and then rotating
+		Mat44f projection = make_perspective_projection(  60.f * std::numbers::pi_v<float> / 180.f, fbwidth/float(fbheight), 0.1f, 100.0f );
 
-		// Define "Projection Matrix" - Create 3D perspective in the camera's 2D view
-		Mat44f projection = make_perspective_projection( 60.f * std::numbers::pi_v<float> / 180.f, fbwidth/float(fbheight), 0.1f, 100.0f );
-
-		// Define final transformation matrix - projCameraWorld matrix
-		Mat44f projCameraWorld = projection * world2camera * model2world;
-
+		// Draw scene
+		// Render langerso model
+		Mat44f model2world = kIdentity44f; 
+		Mat44f projCameraWorld = projection * world2camera * model2world; // Place into camera space
 		Mat33f normalMatrix = mat44_to_mat33( transpose(invert(model2world)) );
+		set_shader_uniforms( progTexture.programId(), projCameraWorld, normalMatrix, textureID );
+		glBindVertexArray( langersoVAO ); // Pass source input as defined in our VAO
+		glDrawArrays( GL_TRIANGLES, 0, langersoVertices ); // Draw <numVertices> vertices , starting at index 0
 
-		// Draw scene
+		// Render 1st landingpad
+		Mat44f modelMatrix1 = make_translation( launchpadPosition1 );
+		projCameraWorld = projection * world2camera * modelMatrix1; // Place into camera space
+		normalMatrix = mat44_to_mat33( transpose(invert(modelMatrix1)) );
+		set_shader_uniforms( progNonTexture.programId(), projCameraWorld, normalMatrix, {1.f, 1.f, 1.f} );
+		glBindVertexArray( landingpadVAO ); // Pass source input as defined in our VAO
+		glDrawArrays( GL_TRIANGLES, 0, landingpadVertices) ; // Draw <numVertices> vertices , starting at index 0
+
+		// Render 2nd landingpad
+		Mat44f modelMatrix2 = make_translation( launchpadPosition2 );
+		projCameraWorld = projection * world2camera * modelMatrix2; // Place into camera space
+		normalMatrix = mat44_to_mat33( transpose(invert(modelMatrix2)) );
+		set_shader_uniforms( progNonTexture.programId(), projCameraWorld, normalMatrix, {1.f, 1.f, 1.f} );
+		glDrawArrays( GL_TRIANGLES, 0, landingpadVertices) ; // Draw <numVertices> vertices , starting at index 0
+
 		OGL_CHECKPOINT_DEBUG();
-		glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );  // Resets also the depth values to the farthest dept 
-		
-		// Use shader program
-		glUseProgram( prog.programId() );
-		glUniformMatrix4fv( 0, 1, GL_TRUE, projCameraWorld.v );	// tranformation matrix 
-		glUniformMatrix3fv( 1, 1, GL_TRUE, normalMatrix.v); // Normal matrix
-		
-		// Set lightning to the shaders
-		Vec3f lightDir = normalize( Vec3f{ -1.f, 1.f, 0.5f } );
-		glUniform3fv( 2, 1, &lightDir.x );
-		// glUniform3f( 3, 0.9f, 0.9f, 0.6f ); // Yellow model
-		glUniform3f( 3, 1.f, 1.f, 1.f );  // White model
-		// glUniform3f( 4, 0.2f, 0.2f, 0.2f );  // Lighter Model
-		glUniform3f( 4, 0.05f, 0.05f, 0.05f );  // Darker Model
 
-		glActiveTexture( GL_TEXTURE0 );  // Activate the 0 texture unit
-		glBindTexture( GL_TEXTURE_2D, textureID ); // Bind the loaded texture
-		// glUniform1i( glGetUniformLocation(prog.programId(), "texture1"), 0 ); // Tell the shader where it will find the texture
-		// Draw scene
-		glBindVertexArray( vao ); // Pass source input as defined in our VAO
 		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
-		glDrawArrays( GL_TRIANGLES, 0, numVertices ); // Draw <numVertices> vertices , starting at index 0
 		
 		// Reset state
 		glBindVertexArray( 0 );
@@ -299,8 +310,8 @@ int main() try
 	}
 
 	// Cleanup.
-	state.prog = nullptr;
-	//TODO: additional cleanup
+	state.progTexture = nullptr;
+	state.progNonTexture = nullptr;
 	
 	return 0;
 }
@@ -329,24 +340,24 @@ namespace
 
 		if( auto* state = static_cast<State_*>(glfwGetWindowUserPointer( aWindow )) )
 		{
-			// R-key reloads shaders.
-			if( GLFW_KEY_R == aKey && GLFW_PRESS == aAction )
-			{
-				if( state->prog )
-				{
-					try
-					{
-						state->prog->reload();
-						std::fprintf( stderr, "Shaders reloaded and recompiled.\n" );
-					}
-					catch( std::exception const& eErr )
-					{
-						std::fprintf( stderr, "Error when reloading shader:\n" );
-						std::fprintf( stderr, "%s\n", eErr.what() );
-						std::fprintf( stderr, "Keeping old shader.\n" );
-					}
-				}
-			}
+			// // R-key reloads shaders.
+			// if( GLFW_KEY_R == aKey && GLFW_PRESS == aAction )
+			// {
+			// 	if( state->prog )
+			// 	{
+			// 		try
+			// 		{
+			// 			state->prog->reload();
+			// 			std::fprintf( stderr, "Shaders reloaded and recompiled.\n" );
+			// 		}
+			// 		catch( std::exception const& eErr )
+			// 		{
+			// 			std::fprintf( stderr, "Error when reloading shader:\n" );
+			// 			std::fprintf( stderr, "%s\n", eErr.what() );
+			// 			std::fprintf( stderr, "Keeping old shader.\n" );
+			// 		}
+			// 	}
+			// }
 	
 			// Camera controls if camera is active
 			if( state->camControl.cameraActive )
@@ -426,11 +437,8 @@ namespace
 			aCamControl.movementSpeed = std::max(aCamControl.movementSpeed * 0.9f, 0.1f); // Prevent speed from going to 0
 
 		// Adjust camera position
-		if ( aCamControl.isForward ){
+		if ( aCamControl.isForward )
 			aCamControl.cameraPosition += aCamControl.cameraForwardDirection * aCamControl.movementSpeed * dt;
-			std::cout << "Camera Position: " << aCamControl.cameraPosition.x<<", " << aCamControl.cameraPosition.y<<", "<<aCamControl.cameraPosition.z<<std::endl;
-
-			}
 		if ( aCamControl.isBackward )
 			aCamControl.cameraPosition -= aCamControl.cameraForwardDirection * aCamControl.movementSpeed * dt;
 		if (aCamControl.isRight)
@@ -447,28 +455,10 @@ namespace
 
 	void update_camera_direction_vectors( State_::CamCtrl_ &aCamControl)
 	{
-		// Calculate the target position
-		
-		// Vec3f targetPosition = aCamControl.cameraPosition + aCamControl.cameraForwardDirection * aCamControl.radius;
-
-		// Vec3f newForward = normalize(targetPosition - aCamControl.cameraPosition);
-		// Vec3f newRight = normalize(cross(aCamControl.cameraUpDirection, newForward));
-		// Vec3f newUp = normalize(cross(newForward, newRight));
-
-		// // Update the camera vectors
-		// aCamControl.cameraForwardDirection = newForward;
-		// aCamControl.cameraRightDirection = newRight;
-		// aCamControl.cameraUpDirection = newUp;
-
-		float sinTheta = sin(aCamControl.theta);
-		float cosTheta = cos(aCamControl.theta);
-		float sinPhi = sin(aCamControl.phi);
-		float cosPhi = cos(aCamControl.phi);
-
 		aCamControl.cameraForwardDirection = normalize(Vec3f(
-			-cosTheta * sinPhi,
-			sinTheta,
-			-cosTheta * cosPhi
+			-cos(aCamControl.theta) * sin(aCamControl.phi),
+			sin(aCamControl.theta),
+			-cos(aCamControl.theta) * cos(aCamControl.phi)
 		));
 
 		aCamControl.cameraRightDirection = normalize(Vec3f(

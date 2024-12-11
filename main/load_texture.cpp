@@ -1,4 +1,4 @@
-#include "texture.hpp"
+#include "load_texture.hpp"
 
 #include <cassert>
 
