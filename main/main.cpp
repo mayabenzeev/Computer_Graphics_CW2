@@ -35,7 +35,9 @@ namespace
 	constexpr float kMovementPerSecond_ = 5.0f; // units per second
 	constexpr float kMouseSensitivity_ = 0.01f; // radians per pixel
 	constexpr Vec3f kLandpadPosition1_ = {5.f, 0.f, -5.f}; // Placed on the sea - y-axis is 0
-	constexpr Vec3f kLandpadPosition2_ = {-2.1f, 0.0f, 1.1f};
+	constexpr Vec3f kLandpadPosition2_ = {-2.1f, 0.f, 1.1f};
+	constexpr Vec3f kLandpadColor_ = {1.f, 1.f, 1.f};
+
 	struct State_
 	{
 		ShaderProgram* progTexture;
@@ -51,7 +53,7 @@ namespace
 			// float radius;
 			float movementSpeed = kMovementPerSecond_;
 			
-			Vec3f cameraPosition = Vec3f{0.0f, 0.0f, 10.0f}; // Starting position
+			Vec3f cameraPosition = Vec3f{0.0f, -0.2f, 0.0f}; // Starting position
 			Vec3f cameraForwardDirection = Vec3f{0.0f, 0.0f, -1.0f}; // Initially facing along -Z
 			Vec3f cameraUpDirection = Vec3f{0.0f, 1.0f, 0.0f}; // Y is up
 			Vec3f cameraRightDirection = Vec3f{1.0f, 0.0f, 0.0f}; // X is right
@@ -61,7 +63,6 @@ namespace
 		} camControl;
 	};
 
-	
 	void glfw_callback_error_( int, char const* );
 	void glfw_callback_key_( GLFWwindow*, int, int, int, int );
 	void glfw_callback_motion_( GLFWwindow*, double, double );
@@ -99,14 +100,11 @@ int main() try
 
 	glfwWindowHint( GLFW_SRGB_CAPABLE, GLFW_TRUE );
 	glfwWindowHint( GLFW_DOUBLEBUFFER, GLFW_TRUE );
-
 	//glfwWindowHint( GLFW_RESIZABLE, GLFW_FALSE );
-
 	glfwWindowHint( GLFW_CONTEXT_VERSION_MAJOR, 4 );
 	glfwWindowHint( GLFW_CONTEXT_VERSION_MINOR, 3 );
 	glfwWindowHint( GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE );
 	glfwWindowHint( GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE );
-
 	glfwWindowHint( GLFW_DEPTH_BITS, 24 );
 
 #	if !defined(NDEBUG)
@@ -131,7 +129,6 @@ int main() try
 	}
 
 	GLFWWindowDeleter windowDeleter{ window };
-
 
 	// Set up event handling
 	State_ state{};
@@ -172,12 +169,9 @@ int main() try
 
 	// Animation state
 	auto last = Clock::now();
-
-	float angle = 0.f;
 	
 	// Other initialization & loading
 	OGL_CHECKPOINT_ALWAYS();
-	
 	// global GL setup 
 	glEnable( GL_FRAMEBUFFER_SRGB ); // enables automatic sRGB conversion of colors
 	glEnable( GL_CULL_FACE ); // Enable face culling
@@ -185,20 +179,14 @@ int main() try
 	glEnable( GL_DEPTH_TEST ); // Enable depth testing
 	glClearColor( 0.2f, 0.2f, 0.2f, 0.0f ); // Sets the clear color to dark gray 
 
-
 	OGL_CHECKPOINT_ALWAYS();
 
-		// Load shader program
-	ShaderProgram progTexture( {
-		{ GL_VERTEX_SHADER, "assets/cw2/default.vert" },
-		{ GL_FRAGMENT_SHADER, "assets/cw2/textured_objects.frag" }
-	} );
+	// Load shader program
+	ShaderProgram progTexture( {{ GL_VERTEX_SHADER, "assets/cw2/default.vert" }, { GL_FRAGMENT_SHADER, "assets/cw2/textured_objects.frag" }} );
+	ShaderProgram progNonTexture( {{ GL_VERTEX_SHADER, "assets/cw2/default.vert" }, { GL_FRAGMENT_SHADER, "assets/cw2/non_textured_objects.frag" }} );
 
-	ShaderProgram progNonTexture( {
-		{ GL_VERTEX_SHADER, "assets/cw2/default.vert" },
-		{ GL_FRAGMENT_SHADER, "assets/cw2/non_textured_objects.frag" }
-	} );
-
+	// Load Meshes and Textures
+	
 	state.progTexture = &progTexture;
 	state.progNonTexture = &progNonTexture;
 	// state.camControl.radius = 10.f;
@@ -210,10 +198,6 @@ int main() try
 	SimpleMeshData landingpadMesh = load_wavefront_obj("assets/cw2/landingpad.obj"); // Load Mesh
 	GLuint landingpadVAO = create_vao(landingpadMesh); // Returns a VAO pointer from the Attributes object
 	std::size_t landingpadVertices = landingpadMesh.positions.size() ; // Calculate the number of vertices to draw later
-
-	// Landing pad position
-	Vec3f launchpadPosition1 = kLandpadPosition1_;
-	Vec3f launchpadPosition2 = kLandpadPosition2_;
 	
 	GLuint textureID = load_texture_2d("assets/cw2/L3211E-4k.jpg");  // Load Texture
 
@@ -253,15 +237,14 @@ int main() try
 		float dt = std::chrono::duration_cast<Secondsf>(now-last).count();
 		last = now;
 
-		angle += dt * std::numbers::pi_v<float> * 0.3f;
-		if( angle >= 2.f*std::numbers::pi_v<float> )
-			angle -= 2.f*std::numbers::pi_v<float>;
+		// angle += dt * std::numbers::pi_v<float> * 0.3f;
+		// if( angle >= 2.f*std::numbers::pi_v<float> )
+		// 	angle -= 2.f*std::numbers::pi_v<float>;
 
 		// Update camera state
 		update_camera_position(state.camControl, dt);
         update_camera_direction_vectors(state.camControl);
 
-		// Update: compute transformation matrices
 		// Define the camera rotation matrices
 		Mat44f Rx = make_rotation_x(state.camControl.theta); // Theta controls vertical rotation
 		Mat44f Ry = make_rotation_y(state.camControl.phi); // Phi controls the horizontal rotation		
@@ -281,19 +264,19 @@ int main() try
 		glDrawArrays( GL_TRIANGLES, 0, langersoVertices ); // Draw <numVertices> vertices , starting at index 0
 
 		// Render 1st landingpad
-		Mat44f modelMatrix1 = make_translation( launchpadPosition1 );
+		Mat44f modelMatrix1 = make_translation( kLandpadPosition1_ );
 		projCameraWorld = projection * world2camera * modelMatrix1; // Place into camera space
 		normalMatrix = mat44_to_mat33( transpose(invert(modelMatrix1)) );
-		set_shader_uniforms( progNonTexture.programId(), projCameraWorld, normalMatrix, {1.f, 1.f, 1.f} );
+		set_shader_uniforms( progNonTexture.programId(), projCameraWorld, normalMatrix, kLandpadColor_ );
 		glBindVertexArray( landingpadVAO ); // Pass source input as defined in our VAO
-		glDrawArrays( GL_TRIANGLES, 0, landingpadVertices) ; // Draw <numVertices> vertices , starting at index 0
+		glDrawArrays( GL_TRIANGLES, 0, landingpadVertices ) ; // Draw <numVertices> vertices , starting at index 0
 
 		// Render 2nd landingpad
-		Mat44f modelMatrix2 = make_translation( launchpadPosition2 );
+		Mat44f modelMatrix2 = make_translation( kLandpadPosition2_ );
 		projCameraWorld = projection * world2camera * modelMatrix2; // Place into camera space
 		normalMatrix = mat44_to_mat33( transpose(invert(modelMatrix2)) );
-		set_shader_uniforms( progNonTexture.programId(), projCameraWorld, normalMatrix, {1.f, 1.f, 1.f} );
-		glDrawArrays( GL_TRIANGLES, 0, landingpadVertices) ; // Draw <numVertices> vertices , starting at index 0
+		set_shader_uniforms( progNonTexture.programId(), projCameraWorld, normalMatrix, kLandpadColor_ );
+		glDrawArrays( GL_TRIANGLES, 0, landingpadVertices ) ; // Draw <numVertices> vertices , starting at index 0
 
 		OGL_CHECKPOINT_DEBUG();
 
@@ -426,6 +409,10 @@ namespace
 			}
 		}
 	}
+}
+
+namespace
+{
 	void update_camera_position( State_::CamCtrl_ &aCamControl, float dt)
 	{
 		if (!aCamControl.cameraActive) return; // No movement if the camera is inactive
@@ -469,6 +456,8 @@ namespace
 	
 		aCamControl.cameraUpDirection = normalize(cross(aCamControl.cameraForwardDirection, aCamControl.cameraRightDirection));
 	}
+
+
 }
 
 namespace
