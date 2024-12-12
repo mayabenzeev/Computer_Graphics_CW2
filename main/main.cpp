@@ -20,10 +20,11 @@
 #include "../third_party/rapidobj/include/rapidobj/rapidobj.hpp"
 
 #include "defaults.hpp"
-#include "loadobj.hpp"
+#include "load_obj.hpp"
 #include "simple_mesh.hpp"
 #include "load_texture.hpp"
-#include "set_shaders.hpp"
+#include "render_model.hpp"
+#include "space_vehicle.hpp"
 
 #include <iostream>
 
@@ -37,11 +38,13 @@ namespace
 	constexpr Vec3f kLandpadPosition1_ = {5.f, 0.f, -5.f}; // Placed on the sea - y-axis is 0
 	constexpr Vec3f kLandpadPosition2_ = {-2.1f, 0.f, 1.1f};
 	constexpr Vec3f kLandpadColor_ = {1.f, 1.f, 1.f};
+	constexpr Vec3f kBurgandy_ = {0.333f, 0.01f, 0.03f};
+	constexpr Vec3f kWhite_ = {1.f, 1.f, 1.f};  
 
 	struct State_
 	{
 		ShaderProgram* progTexture;
-		ShaderProgram* progNonTexture;
+		ShaderProgram* progColor;
 		
 		struct CamCtrl_
 		{
@@ -183,23 +186,49 @@ int main() try
 
 	// Load shader program
 	ShaderProgram progTexture( {{ GL_VERTEX_SHADER, "assets/cw2/default.vert" }, { GL_FRAGMENT_SHADER, "assets/cw2/textured_objects.frag" }} );
-	ShaderProgram progNonTexture( {{ GL_VERTEX_SHADER, "assets/cw2/default.vert" }, { GL_FRAGMENT_SHADER, "assets/cw2/non_textured_objects.frag" }} );
-
-	// Load Meshes and Textures
+	ShaderProgram progColor( {{ GL_VERTEX_SHADER, "assets/cw2/default.vert" }, { GL_FRAGMENT_SHADER, "assets/cw2/colored_objects.frag" }} );
 	
 	state.progTexture = &progTexture;
-	state.progNonTexture = &progNonTexture;
+	state.progColor = &progColor;
 	// state.camControl.radius = 10.f;
 
+	// Load Meshes and Textures
 	SimpleMeshData langersoMesh = load_wavefront_obj("assets/cw2/langerso.obj"); // Load Mesh
 	GLuint langersoVAO = create_vao(langersoMesh); // Returns a VAO pointer from the Attributes object
 	std::size_t langersoVertices = langersoMesh.positions.size() ; // Calculate the number of vertices to draw later
+	GLuint textureID = load_texture_2d("assets/cw2/L3211E-4k.jpg");  // Load Texture
 
 	SimpleMeshData landingpadMesh = load_wavefront_obj("assets/cw2/landingpad.obj"); // Load Mesh
 	GLuint landingpadVAO = create_vao(landingpadMesh); // Returns a VAO pointer from the Attributes object
 	std::size_t landingpadVertices = landingpadMesh.positions.size() ; // Calculate the number of vertices to draw later
+
+	float cylinderRadius = 0.06f;  // Radius from the cylinder scaling
+	float cubeHeight = 0.1f;
+	float cubeRadius = 0.1f;
+	SimpleMeshData cylinderMesh = make_cylinder(
+		true, 64, kBurgandy_, 
+		make_translation( { 0.f, 0.05f, 0.f }) * make_scaling( cylinderRadius, 1.f, cylinderRadius ) * make_rotation_z(std::numbers::pi_v<float> / 2.0f));	
+
+	SimpleMeshData coneMesh = make_cone(
+		true, 64, kBurgandy_ , 
+		make_translation( { 0.f, 1.05f, 0.f }) * make_scaling( cylinderRadius, 0.2f, cylinderRadius ) *  make_rotation_z(std::numbers::pi_v<float> / 2.0f));
+	SimpleMeshData cubeMesh1 = make_cube(
+		kWhite_ , 
+		make_translation( { 0.06f, 0.f, 0.f }) * make_scaling( 0.01f, cubeHeight, 0.01f ));
+	SimpleMeshData cubeMesh2 = make_cube(
+		kWhite_ , 
+		make_translation( { cylinderRadius * cos(2 * std::numbers::pi_v<float> / 3), 0.f, cylinderRadius * sin(2 * std::numbers::pi_v<float> / 3) }) * 
+		make_scaling( 0.01f, cubeHeight, 0.01f ) *  make_rotation_z( 2 * std::numbers::pi_v<float> / 3 ));
+	SimpleMeshData cubeMesh3 = make_cube(
+		kWhite_ , 
+		make_translation( { cylinderRadius * cos(4 * std::numbers::pi_v<float> / 3), 0.f, cylinderRadius * sin(4 * std::numbers::pi_v<float> / 3) }) * 
+		make_scaling( 0.01f, cubeHeight, 0.01f ) *  make_rotation_z( 4 * std::numbers::pi_v<float> / 3 ));
+
+	auto rocket = concatenate( cylinderMesh, coneMesh );
+	auto legs = concatenate( concatenate( cubeMesh1, cubeMesh2 ), cubeMesh3 );
+	GLuint vehicleVAO = create_vao( concatenate(rocket, legs));
+	std::size_t vehicleVertices = cylinderMesh.positions.size() + coneMesh.positions.size() + cubeMesh1.positions.size() * 3;
 	
-	GLuint textureID = load_texture_2d("assets/cw2/L3211E-4k.jpg");  // Load Texture
 
 	// Main loop
 	while( !glfwWindowShouldClose( window ) )
@@ -237,10 +266,6 @@ int main() try
 		float dt = std::chrono::duration_cast<Secondsf>(now-last).count();
 		last = now;
 
-		// angle += dt * std::numbers::pi_v<float> * 0.3f;
-		// if( angle >= 2.f*std::numbers::pi_v<float> )
-		// 	angle -= 2.f*std::numbers::pi_v<float>;
-
 		// Update camera state
 		update_camera_position(state.camControl, dt);
         update_camera_direction_vectors(state.camControl);
@@ -256,31 +281,22 @@ int main() try
 
 		// Draw scene
 		// Render langerso model
-		Mat44f model2world = kIdentity44f; 
-		Mat44f projCameraWorld = projection * world2camera * model2world; // Place into camera space
-		Mat33f normalMatrix = mat44_to_mat33( transpose(invert(model2world)) );
-		set_shader_uniforms( progTexture.programId(), projCameraWorld, normalMatrix, textureID );
-		glBindVertexArray( langersoVAO ); // Pass source input as defined in our VAO
-		glDrawArrays( GL_TRIANGLES, 0, langersoVertices ); // Draw <numVertices> vertices , starting at index 0
-
+		render_model(progTexture, langersoVAO, projection, world2camera, {0.f, 0.f, 0.f}, textureID, langersoVertices );
+	
 		// Render 1st landingpad
-		Mat44f modelMatrix1 = make_translation( kLandpadPosition1_ );
-		projCameraWorld = projection * world2camera * modelMatrix1; // Place into camera space
-		normalMatrix = mat44_to_mat33( transpose(invert(modelMatrix1)) );
-		set_shader_uniforms( progNonTexture.programId(), projCameraWorld, normalMatrix, kLandpadColor_ );
-		glBindVertexArray( landingpadVAO ); // Pass source input as defined in our VAO
-		glDrawArrays( GL_TRIANGLES, 0, landingpadVertices ) ; // Draw <numVertices> vertices , starting at index 0
+		render_model(progColor, landingpadVAO, projection, world2camera, kLandpadPosition1_, landingpadVertices );
 
 		// Render 2nd landingpad
-		Mat44f modelMatrix2 = make_translation( kLandpadPosition2_ );
-		projCameraWorld = projection * world2camera * modelMatrix2; // Place into camera space
-		normalMatrix = mat44_to_mat33( transpose(invert(modelMatrix2)) );
-		set_shader_uniforms( progNonTexture.programId(), projCameraWorld, normalMatrix, kLandpadColor_ );
-		glDrawArrays( GL_TRIANGLES, 0, landingpadVertices ) ; // Draw <numVertices> vertices , starting at index 0
+		render_model(progColor, landingpadVAO, projection, world2camera, kLandpadPosition2_, landingpadVertices );
+
+		// Render cylinder
+		render_model(progColor, vehicleVAO, projection, world2camera, kLandpadPosition1_, vehicleVertices );
+
 
 		OGL_CHECKPOINT_DEBUG();
 
 		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+		// glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 		
 		// Reset state
 		glBindVertexArray( 0 );
@@ -294,7 +310,7 @@ int main() try
 
 	// Cleanup.
 	state.progTexture = nullptr;
-	state.progNonTexture = nullptr;
+	state.progColor = nullptr;
 	
 	return 0;
 }

@@ -65,16 +65,18 @@ endif
 GENERATED :=
 OBJECTS :=
 
+GENERATED += $(OBJDIR)/load_obj.o
 GENERATED += $(OBJDIR)/load_texture.o
-GENERATED += $(OBJDIR)/loadobj.o
 GENERATED += $(OBJDIR)/main.o
-GENERATED += $(OBJDIR)/set_shaders.o
+GENERATED += $(OBJDIR)/render_model.o
 GENERATED += $(OBJDIR)/simple_mesh.o
+GENERATED += $(OBJDIR)/space_vehicle.o
+OBJECTS += $(OBJDIR)/load_obj.o
 OBJECTS += $(OBJDIR)/load_texture.o
-OBJECTS += $(OBJDIR)/loadobj.o
 OBJECTS += $(OBJDIR)/main.o
-OBJECTS += $(OBJDIR)/set_shaders.o
+OBJECTS += $(OBJDIR)/render_model.o
 OBJECTS += $(OBJDIR)/simple_mesh.o
+OBJECTS += $(OBJDIR)/space_vehicle.o
 
 # Rules
 # #############################################
@@ -138,19 +140,22 @@ endif
 # File Rules
 # #############################################
 
-$(OBJDIR)/load_texture.o: load_texture.cpp
+$(OBJDIR)/load_obj.o: load_obj.cpp
 	@echo $(notdir $<)
 	$(SILENT) $(CXX) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
-$(OBJDIR)/loadobj.o: loadobj.cpp
+$(OBJDIR)/load_texture.o: load_texture.cpp
 	@echo $(notdir $<)
 	$(SILENT) $(CXX) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
 $(OBJDIR)/main.o: main.cpp
 	@echo $(notdir $<)
 	$(SILENT) $(CXX) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
-$(OBJDIR)/set_shaders.o: set_shaders.cpp
+$(OBJDIR)/render_model.o: render_model.cpp
 	@echo $(notdir $<)
 	$(SILENT) $(CXX) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
 $(OBJDIR)/simple_mesh.o: simple_mesh.cpp
+	@echo $(notdir $<)
+	$(SILENT) $(CXX) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
+$(OBJDIR)/space_vehicle.o: space_vehicle.cpp
 	@echo $(notdir $<)
 	$(SILENT) $(CXX) $(ALL_CXXFLAGS) $(FORCE_INCLUDE) -o "$@" -MF "$(@:%.o=%.d)" -c "$<"
 

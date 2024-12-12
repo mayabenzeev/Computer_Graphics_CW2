@@ -1,4 +1,4 @@
-#include "loadobj.hpp"
+#include "load_obj.hpp"
 
 #include <rapidobj/rapidobj.hpp>
 
