@@ -1,12 +1,17 @@
 #include "simple_mesh.hpp"
 
-SimpleMeshData concatenate( SimpleMeshData aM, SimpleMeshData const& aN )
+SimpleMeshData concatenate( std::vector<SimpleMeshData> const& aMeshes )
 {
-	aM.positions.insert( aM.positions.end(), aN.positions.begin(), aN.positions.end() );
-	aM.colors.insert( aM.colors.end(), aN.colors.begin(), aN.colors.end() );
-	aM.normals.insert( aM.normals.end(), aN.normals.begin(), aN.normals.end() );
-	aM.texcoords.insert( aM.texcoords.end(), aN.texcoords.begin(), aN.texcoords.end() );
-	return aM;
+	SimpleMeshData result;
+	for (const auto& mesh : aMeshes) 
+	{
+        result.positions.insert(result.positions.end(), mesh.positions.begin(), mesh.positions.end());
+        result.colors.insert(result.colors.end(), mesh.colors.begin(), mesh.colors.end());
+        result.normals.insert(result.normals.end(), mesh.normals.begin(), mesh.normals.end());
+        result.texcoords.insert(result.texcoords.end(), mesh.texcoords.begin(), mesh.texcoords.end());
+    }
+
+    return result;
 }
 
 

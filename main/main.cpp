@@ -7,6 +7,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 
 #include "../support/error.hpp"
 #include "../support/program.hpp"
@@ -39,7 +40,9 @@ namespace
 	constexpr Vec3f kLandpadPosition2_ = {-2.1f, 0.f, 1.1f};
 	constexpr Vec3f kLandpadColor_ = {1.f, 1.f, 1.f};
 	constexpr Vec3f kBurgandy_ = {0.333f, 0.01f, 0.03f};
-	constexpr Vec3f kWhite_ = {1.f, 1.f, 1.f};  
+	constexpr Vec3f kGrayBurgandy_ = {0.232f, 0.03f, 0.045f};
+	constexpr Vec3f kLightBlue_ = {0.745f, 0.851f, 0.867f}; // #bed9dd
+	constexpr Vec3f kGray_ = {0.718f, 0.718f, 0.718f}; // #b7b7b7
 
 	struct State_
 	{
@@ -202,32 +205,65 @@ int main() try
 	GLuint landingpadVAO = create_vao(landingpadMesh); // Returns a VAO pointer from the Attributes object
 	std::size_t landingpadVertices = landingpadMesh.positions.size() ; // Calculate the number of vertices to draw later
 
-	float cylinderRadius = 0.06f;  // Radius from the cylinder scaling
-	float cubeHeight = 0.1f;
-	float cubeRadius = 0.1f;
-	SimpleMeshData cylinderMesh = make_cylinder(
+	float cylinderBodyRadius = 0.07f; 
+	float cylinderBoosterRadius = 0.03f;
+	float cubeHeight = 0.08f;
+	float cubeRadius = 0.01f;
+
+	// Rocket base
+	SimpleMeshData cylinderMesh1 = make_cylinder(
+		true, 64, kGrayBurgandy_, 
+		make_translation( { 0.f, 0.05f, 0.f }) * 
+		make_scaling( cylinderBodyRadius, 1.f, cylinderBodyRadius ) * 
+		make_rotation_z(std::numbers::pi_v<float> / 2.0f));	
+	SimpleMeshData coneMesh1 = make_cone(
+		true, 64, kGrayBurgandy_ , 
+		make_translation( { 0.f, 1.05f, 0.f }) * 
+		make_scaling( cylinderBodyRadius, 0.2f, cylinderBodyRadius ) * 
+		make_rotation_z(std::numbers::pi_v<float> / 2.0f));
+
+	// Boosters
+	SimpleMeshData cylinderMesh2 = make_cylinder(
 		true, 64, kBurgandy_, 
-		make_translation( { 0.f, 0.05f, 0.f }) * make_scaling( cylinderRadius, 1.f, cylinderRadius ) * make_rotation_z(std::numbers::pi_v<float> / 2.0f));	
-
-	SimpleMeshData coneMesh = make_cone(
+		make_translation( { cylinderBodyRadius * 1.05f, 0.03f, 0.f }) * 
+		make_scaling( cylinderBoosterRadius, 0.5f, cylinderBoosterRadius ) * 
+		make_rotation_z(std::numbers::pi_v<float> / 2.0f));	
+	SimpleMeshData coneMesh2 = make_cone(
 		true, 64, kBurgandy_ , 
-		make_translation( { 0.f, 1.05f, 0.f }) * make_scaling( cylinderRadius, 0.2f, cylinderRadius ) *  make_rotation_z(std::numbers::pi_v<float> / 2.0f));
-	SimpleMeshData cubeMesh1 = make_cube(
-		kWhite_ , 
-		make_translation( { 0.06f, 0.f, 0.f }) * make_scaling( 0.01f, cubeHeight, 0.01f ));
-	SimpleMeshData cubeMesh2 = make_cube(
-		kWhite_ , 
-		make_translation( { cylinderRadius * cos(2 * std::numbers::pi_v<float> / 3), 0.f, cylinderRadius * sin(2 * std::numbers::pi_v<float> / 3) }) * 
-		make_scaling( 0.01f, cubeHeight, 0.01f ) *  make_rotation_z( 2 * std::numbers::pi_v<float> / 3 ));
-	SimpleMeshData cubeMesh3 = make_cube(
-		kWhite_ , 
-		make_translation( { cylinderRadius * cos(4 * std::numbers::pi_v<float> / 3), 0.f, cylinderRadius * sin(4 * std::numbers::pi_v<float> / 3) }) * 
-		make_scaling( 0.01f, cubeHeight, 0.01f ) *  make_rotation_z( 4 * std::numbers::pi_v<float> / 3 ));
+		make_translation( { cylinderBodyRadius * 1.05f, 0.53f, 0.f }) * 
+		make_scaling( cylinderBoosterRadius, 0.07f, cylinderBoosterRadius ) * 
+		make_rotation_z(std::numbers::pi_v<float> / 2.0f));
+	SimpleMeshData cylinderMesh3 = make_cylinder(
+		true, 64, kBurgandy_, 
+		make_translation( { -cylinderBodyRadius * 1.05f, 0.03f, 0.f }) * 
+		make_scaling( cylinderBoosterRadius, 0.5f, cylinderBoosterRadius ) * 
+		make_rotation_z(std::numbers::pi_v<float> / 2.0f));	
+	SimpleMeshData coneMesh3 = make_cone(
+		true, 64, kBurgandy_ , 
+		make_translation( { -cylinderBodyRadius * 1.05f, 0.53f, 0.f }) * 
+		make_scaling( cylinderBoosterRadius, 0.07f, cylinderBoosterRadius ) * 
+		make_rotation_z(std::numbers::pi_v<float> / 2.0f));
 
-	auto rocket = concatenate( cylinderMesh, coneMesh );
-	auto legs = concatenate( concatenate( cubeMesh1, cubeMesh2 ), cubeMesh3 );
-	GLuint vehicleVAO = create_vao( concatenate(rocket, legs));
-	std::size_t vehicleVertices = cylinderMesh.positions.size() + coneMesh.positions.size() + cubeMesh1.positions.size() * 3;
+	// Legs 
+	SimpleMeshData cubeMesh1 = make_cube(
+		kLightBlue_ , 
+		make_translation( { 0.f, cubeHeight, cylinderBodyRadius }) * 
+		make_scaling( cubeRadius, cubeHeight, cubeRadius ));
+		// make_rotation_z(2 * std::numbers::pi_v<float> / 3));
+	SimpleMeshData cubeMesh2 = make_cube(
+		kLightBlue_ , 
+		make_translation( { cylinderBodyRadius * sqrtf(3.f) / 2.0f, cubeHeight, -cylinderBodyRadius / 2.0f }) *
+		make_scaling( cubeRadius, cubeHeight, cubeRadius )); 
+		// make_rotation_z(2 * std::numbers::pi_v<float> / 3));
+	SimpleMeshData cubeMesh3 = make_cube(
+		kLightBlue_ , 
+		make_translation( { -cylinderBodyRadius * sqrtf(3.f) / 2.0f, cubeHeight , -cylinderBodyRadius / 2.0f }) * 
+		make_scaling( cubeRadius, cubeHeight, cubeRadius ));
+		// make_rotation_z(2 * std::numbers::pi_v<float> / 3));
+
+	GLuint vehicleVAO = create_vao( concatenate( {cylinderMesh1,cylinderMesh2,cylinderMesh3, coneMesh1, coneMesh2, coneMesh3, cubeMesh1, cubeMesh2, cubeMesh3} ));
+	std::size_t vehicleVertices = cylinderMesh1.positions.size() + cylinderMesh2.positions.size() + cylinderMesh2.positions.size() + 
+		coneMesh1.positions.size() + coneMesh2.positions.size() +coneMesh3.positions.size() + cubeMesh1.positions.size() * 3;
 	
 
 	// Main loop

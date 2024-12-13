@@ -17,7 +17,7 @@ struct SimpleMeshData
 	
 };
 
-SimpleMeshData concatenate( SimpleMeshData, SimpleMeshData const& );
+SimpleMeshData concatenate( std::vector<SimpleMeshData> const& );
 
 
 GLuint create_vao( SimpleMeshData const& );

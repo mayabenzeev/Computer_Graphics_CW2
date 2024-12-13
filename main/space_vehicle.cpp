@@ -23,13 +23,21 @@ SimpleMeshData make_cylinder( bool aCapped, std::size_t aSubdivs, Vec3f aColor, 
         pos.emplace_back(Vec3f{0.f, prevY, prevZ});
         pos.emplace_back(Vec3f{0.f, y, z});
         pos.emplace_back(Vec3f{1.f, prevY, prevZ});
+        
+        normals.emplace_back(Vec3f{0.f, prevY, prevZ});
+        normals.emplace_back(Vec3f{0.f, y, z});
+        normals.emplace_back(Vec3f{1.f, prevY, prevZ});
 
         pos.emplace_back(Vec3f{0.f, y, z});
         pos.emplace_back(Vec3f{1.f, y, z});
         pos.emplace_back(Vec3f{1.f, prevY, prevZ});
 
-        Vec3f normal = normalize(Vec3f{0.f, y, z});
-        normals.insert(normals.end(), 6, normal);
+        normals.emplace_back(Vec3f{0.f, y, z});
+        normals.emplace_back(Vec3f{1.f, y, z});
+        normals.emplace_back(Vec3f{1.f, prevY, prevZ});
+
+        // Vec3f normal = normalize(Vec3f{0.f, y, z});
+        // normals.insert(normals.end(), 6, normal);
 
         prevY = y;
         prevZ = z;
@@ -48,7 +56,7 @@ SimpleMeshData make_cylinder( bool aCapped, std::size_t aSubdivs, Vec3f aColor, 
             pos.emplace_back(Vec3f{0.f, y, z});
             pos.emplace_back(Vec3f{0.f, prevY, prevZ});
 
-            Vec3f normal = normalize(Vec3f{-1.f, 0.f, 0.f});
+            Vec3f normal = normalize(Vec3f{0.f, 0.f, -1.f});
             normals.insert(normals.end(), 3, normal);
 
             prevY = y;
@@ -69,7 +77,7 @@ SimpleMeshData make_cylinder( bool aCapped, std::size_t aSubdivs, Vec3f aColor, 
             pos.emplace_back(Vec3f{1.f, prevY, prevZ});
             pos.emplace_back(Vec3f{1.f, y, z});
 
-            Vec3f normal = normalize(Vec3f{1.f, 0.f, 0.f});
+            Vec3f normal = normalize(Vec3f{0.f, 0.f, 1.f});
             normals.insert(normals.end(), 3, normal);
 
             prevY = y;
@@ -77,13 +85,14 @@ SimpleMeshData make_cylinder( bool aCapped, std::size_t aSubdivs, Vec3f aColor, 
         }
     }
 
-    for (auto& p : pos) 
+    for (size_t i = 0; i < pos.size(); ++i)
     {
-        // std::fprintf( stderr, "pretransform" );
-        Vec4f p4{ p.x, p.y, p.z, 1.f };
-        Vec4f t = aPreTransform * p4;
-        t /= t.w;
-        p = Vec3f{ t.x, t.y, t.z };
+        Vec4f tp = aPreTransform * Vec4f{ pos[i].x, pos[i].y, pos[i].z, 1.f };
+        Vec4f tn = aPreTransform * Vec4f{ normals[i].x, normals[i].y, normals[i].z, 1.f };
+        tp /= tp.w;
+        tn /= tn.w;
+        pos[i] = { tp.x, tp.y, tp.z };
+        normals[i] = normalize(Vec3f{ tn.x, tn.y, tn.z });
     }
 
     std::vector col( pos.size(), aColor ); // Apply a color to each vertex
@@ -97,7 +106,7 @@ SimpleMeshData make_cylinder( bool aCapped, std::size_t aSubdivs, Vec3f aColor, 
 SimpleMeshData make_cone( bool aCapped, std::size_t aSubdivs, Vec3f aColor, Mat44f aPreTransform )
 {
     SimpleMeshData meshData;
-	std::vector<Vec3f> pos;
+	std::vector<Vec3f> pos, normals;
 
     float prevY = 1.0f; 
     float prevZ = 0.0f; 
@@ -109,25 +118,33 @@ SimpleMeshData make_cone( bool aCapped, std::size_t aSubdivs, Vec3f aColor, Mat4
         float y = std::cos( angle );
         float z = std::sin( angle );
 
-        pos.push_back(Vec3f{1.f, 0.f, 0.f});
-        pos.push_back(Vec3f{0.f, prevY, prevZ});
-        pos.push_back(Vec3f{0.f, y, z});
+        pos.emplace_back(Vec3f{0.f, prevY, prevZ});
+        pos.emplace_back(Vec3f{0.f, y, z});
+        pos.emplace_back(Vec3f{1.f, 0.f, 0.f});
+
+        normals.emplace_back(Vec3f{0.f, y - prevY, z - prevZ});
+        normals.emplace_back(Vec3f{1.f, - prevY, - prevZ});
+        normals.emplace_back( normalize(cross(Vec3f{0.f, y - prevY, z - prevZ}, Vec3f{1.f, - prevY, - prevZ})));
 
         prevY = y;
         prevZ = z;
     }
 
-    for (auto& p : pos) 
+    for (size_t i = 0; i < pos.size(); ++i)
     {
-        Vec4f p4{ p.x, p.y, p.z, 1.f };
-        Vec4f t = aPreTransform * p4;
-        t /= t.w;
-        p = Vec3f{ t.x, t.y, t.z };
+        Vec4f tp = aPreTransform * Vec4f{ pos[i].x, pos[i].y, pos[i].z, 1.f };
+        Vec4f tn = aPreTransform * Vec4f{ normals[i].x, normals[i].y, normals[i].z, 1.f };
+        tp /= tp.w;
+        tn /= tn.w;
+        pos[i] = { tp.x, tp.y, tp.z };
+        normals[i] = normalize(Vec3f{ tn.x, tn.y, tn.z });
     }
     std::vector col( pos.size(), aColor ); // Apply a color to each vertex
 
     meshData.positions = std::move(pos);
     meshData.colors = std::move(col);
+    meshData.normals = std::move(normals);
+
 
     return meshData;
 }
@@ -138,14 +155,16 @@ SimpleMeshData make_cube( Vec3f aColor, Mat44f aPreTransform )
 
     for (int i = 0; i < sizeof(kCubePositions) / sizeof(float) / 3; i++) 
     {
-        Vec3f p = { kCubePositions[3*i], kCubePositions[3*i+1], kCubePositions[3*i+2] };
-        
-        Vec4f p4{ p.x, p.y, p.z, 1.f };
-        Vec4f t = aPreTransform * p4;
-        t /= t.w;
-        p = Vec3f{ t.x, t.y, t.z };
-        meshData.positions.push_back(p);
-        meshData.colors.push_back(aColor);
+        Vec4f tp = aPreTransform * Vec4f{ kCubePositions[3*i], kCubePositions[3*i+1], kCubePositions[3*i+2], 1.f };
+        Vec4f tn = aPreTransform * Vec4f{ kCubeNormals[3*i], kCubeNormals[3*i+1], kCubeNormals[3*i+2], 1.f };
+        tp /= tp.w;
+        tn /= tn.w;
+        Vec3f p = Vec3f{ tp.x, tp.y, tp.z };
+        Vec3f n = normalize(Vec3f{ tn.x, tn.y, tn.z });
+
+        meshData.positions.emplace_back(p);
+        meshData.colors.emplace_back(aColor);
+        meshData.normals.emplace_back(n);
     }
 
     return meshData;
