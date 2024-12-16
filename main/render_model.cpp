@@ -45,12 +45,13 @@ void render_model( ShaderProgram& aShaderProg, GLuint aVAO, const Mat44f& aProje
     glDrawArrays( GL_TRIANGLES, 0, aNumVertices ); // Draw <numVertices> vertices , starting at index 0
 }
 
+
 void render_model( ShaderProgram& aShaderProg, GLuint aVAO, const Mat44f& aProjection, const Mat44f& aWorld2camera, const Vec3f& aPosition, std::size_t aNumVertices )
 {
     Mat44f model2world = make_translation( aPosition ); 
     set_shader_uniforms( 
         aShaderProg.programId(), 
-        aProjection * aWorld2camera * model2world, 
+        aProjection * aWorld2camera * model2world , 
         mat44_to_mat33( transpose(invert(model2world)) )
     );
     glBindVertexArray( aVAO ); // Pass source input as defined in our VAO

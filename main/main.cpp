@@ -26,6 +26,7 @@
 #include "load_texture.hpp"
 #include "render_model.hpp"
 #include "space_vehicle.hpp"
+#include "eCamera_mode.hpp"
 
 #include <iostream>
 
@@ -48,6 +49,12 @@ namespace
 	{
 		ShaderProgram* progTexture;
 		ShaderProgram* progColor;
+		CameraMode camMode = FreeCamera;
+
+		Vec3f trackCameraDistanceOffset = {0.f, -1.f, -5.f};
+		Vec3f groundCameraPosition = {-2.f, -0.1f, 1.f};
+		// Vec3f groundCameraPosition = kLandpadPosition2_;
+
 		
 		struct CamCtrl_
 		{
@@ -86,10 +93,12 @@ namespace
 	void glfw_callback_key_( GLFWwindow*, int, int, int, int );
 	void glfw_callback_motion_( GLFWwindow*, double, double );
 	void glfw_callback_mouse_button_( GLFWwindow*, int, int, int );
-	void update_camera_position( State_::CamCtrl_&, float );
-	void update_camera_direction_vectors( State_::CamCtrl_&);
+	void update_camera_position_by_cam_movement( State_::CamCtrl_&, float );
+	void update_free_camera_direction_vectors( State_::CamCtrl_&);
 	void update_ship_position( State_::SpaceshipCtrl_ &, float );
-	void update_ship_direction_vectors( State_::SpaceshipCtrl_ & );
+	void update_ship_direction_vectors( State_::SpaceshipCtrl_ & );	
+	void update_camera ( State_&, float );
+
 
 
 	struct GLFWCleanupHelper
@@ -315,21 +324,20 @@ int main() try
 		last = now;
 
 		// Update camera state
-		update_camera_position(state.camControl, dt);
-        update_camera_direction_vectors(state.camControl);
+		update_camera(state, dt);
+
 
 		// Update spaceship state
 		update_ship_position(state.spaceship, dt);
 		// update_ship_direction_vectors(state.spaceship);
 
 		// Define the camera rotation matrices
-		Mat44f Rx = make_rotation_x(state.camControl.theta); // Theta controls vertical rotation
-		Mat44f Ry = make_rotation_y(state.camControl.phi); // Phi controls the horizontal rotation		
+		Mat44f Rx = make_rotation_x(state.camControl.theta); // Theta controls vertical rotation -  yaw
+		Mat44f Ry = make_rotation_y(state.camControl.phi); // Phi controls the horizontal rotation	- pitch	
 
 		// Define the spaceship rotation matrix
-		// state.spaceship.shipRotation = make_rotation_x(state.spaceship.angle);
-		//  * make_rotation_y(state.spaceship.angle);
-// 
+		state.spaceship.shipRotation =  make_rotation_x(state.spaceship.angle);
+
 		// transformation for langerso
 		Mat44f T = make_translation({state.camControl.cameraPosition.x, state.camControl.cameraPosition.y, -state.camControl.cameraPosition.z}); // Define the camera position in world space
 		Mat44f world2camera = Rx * Ry * T; // Create world to camera matrix by first translating and then rotating
@@ -341,13 +349,14 @@ int main() try
 	
 		// Render 1st landingpad
 		render_model(progColor, landingpadVAO, projection, world2camera, kLandpadPosition1_, landingpadVertices );
-
+	
 		// Render 2nd landingpad
 		render_model(progColor, landingpadVAO, projection, world2camera, kLandpadPosition2_, landingpadVertices );
 
 		// Render spaceship
-		// render_model(progColor, vehicleVAO, projection, world2camera , state.spaceship.shipPosition, vehicleVertices );
-		render_model(progColor, vehicleVAO, projection, world2camera * state.spaceship.shipRotation, state.spaceship.shipPosition, vehicleVertices );
+		render_model(progColor, vehicleVAO, projection, world2camera , state.spaceship.shipPosition, vehicleVertices );
+		
+		// render_model(progColor, vehicleVAO, projection, world2camera , state.spaceship.shipPosition, state.spaceship.shipRotation, vehicleVertices );
 
 
 		OGL_CHECKPOINT_DEBUG();
@@ -433,6 +442,10 @@ namespace
 				state->spaceship.angle = state->spaceship.initAngle; 
 				state->spaceship.shipDirection = {0.0f, 1.0f, 0.0f}; 
 			}
+			if ( GLFW_KEY_C == aKey && GLFW_PRESS == aAction ) 
+			{
+            	state->camMode = static_cast<CameraMode>((state->camMode + 1) % 3);
+        	}
 		}
 	}
 
@@ -479,7 +492,7 @@ namespace
 
 namespace
 {
-	void update_camera_position( State_::CamCtrl_ &aCamControl, float dt)
+	void update_camera_position_by_cam_movement( State_::CamCtrl_ &aCamControl, float dt)
 	{
 		if (!aCamControl.cameraActive) return; // No movement if the camera is inactive
     
@@ -505,7 +518,7 @@ namespace
 
 	}
 
-	void update_camera_direction_vectors( State_::CamCtrl_ &aCamControl)
+	void update_free_camera_direction_vectors( State_::CamCtrl_ &aCamControl)
 	{
 		aCamControl.cameraForwardDirection = normalize(Vec3f(
 			-cos(aCamControl.theta) * sin(aCamControl.phi),
@@ -522,6 +535,31 @@ namespace
 		aCamControl.cameraUpDirection = normalize(cross(aCamControl.cameraForwardDirection, aCamControl.cameraRightDirection));
 	}
 
+	void update_camera (State_& state, float dt)
+	{
+		Vec3f directionToVehicle;
+
+		switch (state.camMode) 
+		{
+        	case FreeCamera:				
+				update_camera_position_by_cam_movement(state.camControl, dt);
+				update_free_camera_direction_vectors(state.camControl);
+				break;
+			case FixedTrackCamera:
+				state.camControl.phi = 0.f;
+				state.camControl.theta = 0.f;
+				directionToVehicle = normalize(state.spaceship.shipPosition - state.camControl.cameraPosition);
+				state.camControl.cameraPosition = state.trackCameraDistanceOffset - state.spaceship.shipPosition;
+				break;
+			case GroundCamera:
+				state.camControl.cameraPosition = state.groundCameraPosition;
+				directionToVehicle = normalize(state.spaceship.shipPosition - state.camControl.cameraPosition);
+				state.camControl.phi = std::atan2(directionToVehicle.x, -directionToVehicle.z);
+				state.camControl.theta = - std::atan2(directionToVehicle.y, std::sqrt(directionToVehicle.x * directionToVehicle.x + directionToVehicle.z * directionToVehicle.z));
+				break;
+		}
+	}
+
 	void update_ship_position( State_::SpaceshipCtrl_ &aShipControl, float dt)
 	{
 		
@@ -534,18 +572,20 @@ namespace
 		// Adjust ship direction of movement
 		aShipControl.angle += dt * aShipControl.shipSpeed / aShipControl.radius;
         aShipControl.angle = std::min(aShipControl.angle, static_cast<float>(M_PI) - 0.1f); 
+		// std::fprintf( stderr, "angle (%f)\n", aShipControl.angle);
+
 
 		// Define the curved trajectory
 		float heightFactor = 2.0;  // Adjust this factor to control the vertical lift speed
 		aShipControl.shipPosition.x += aShipControl.radius * sin(aShipControl.angle);  // Sine for horizontal motion
 		aShipControl.shipPosition.y += dt * heightFactor ;  // Linear ascent
-		
-		aShipControl.shipDirection = normalize(Vec3f(cos(aShipControl.angle), 0, -sin(aShipControl.angle)));
+		// aShipControl.shipRotation = make_rotation_x((dt * heightFactor) / (aShipControl.radius * sin(aShipControl.angle)));
+		// aShipControl.shipDirection = normalize(Vec3f(cos(aShipControl.angle), 0, -sin(aShipControl.angle)));
 		
 		// Adjust ship position
 		// aShipControl.shipPosition += aShipControl.shipDirection * aShipControl.shipSpeed * dt;
-		std::fprintf( stderr, "position (%f,%f,%f)\n", aShipControl.shipPosition.x, aShipControl.shipPosition.y, aShipControl.shipPosition.z);
-		std::fprintf( stderr, "direction (%f,%f,%f)\n", aShipControl.shipDirection.x, aShipControl.shipDirection.y, aShipControl.shipDirection.z);
+		// std::fprintf( stderr, "position (%f,%f,%f)\n", aShipControl.shipPosition.x, aShipControl.shipPosition.y, aShipControl.shipPosition.z);
+		// std::fprintf( stderr, "direction (%f,%f,%f)\n", aShipControl.shipDirection.x, aShipControl.shipDirection.y, aShipControl.shipDirection.z);
 	}
 
 // 	void update_ship_direction_vectors( State_::SpaceshipCtrl_ &aShipControl )
