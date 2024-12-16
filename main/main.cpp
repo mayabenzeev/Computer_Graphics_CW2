@@ -56,17 +56,30 @@ namespace
 			bool actionSpeedUp, actionSlowDown;
 			
 			float phi, theta;
-			// float radius;
 			float movementSpeed = kMovementPerSecond_;
 			
 			Vec3f cameraPosition = Vec3f{0.0f, -0.2f, 0.0f}; // Starting position
 			Vec3f cameraForwardDirection = Vec3f{0.0f, 0.0f, -1.0f}; // Initially facing along -Z
 			Vec3f cameraUpDirection = Vec3f{0.0f, 1.0f, 0.0f}; // Y is up
 			Vec3f cameraRightDirection = Vec3f{1.0f, 0.0f, 0.0f}; // X is right
-			Vec3f targetPosition;
 
 			float lastX, lastY;
 		} camControl;
+
+		struct SpaceshipCtrl_
+		{
+			bool isAnimation = false, isAnimationPaused = true;
+
+			float shipInitSpeed = 0.f, initAngle = 0.f, radius = 5.f, acceleration = 0.01f;
+			float shipSpeed = shipInitSpeed;
+			float angle = initAngle;
+			
+			Vec3f shipInitPosition = kLandpadPosition1_;
+			Vec3f shipPosition = shipInitPosition;
+			Vec3f shipDirection = {0.0f, 1.0f, 0.0f}; // up to Y axis direction
+
+			Mat44f shipRotation = kIdentity44f;
+		} spaceship;
 	};
 
 	void glfw_callback_error_( int, char const* );
@@ -75,6 +88,9 @@ namespace
 	void glfw_callback_mouse_button_( GLFWwindow*, int, int, int );
 	void update_camera_position( State_::CamCtrl_&, float );
 	void update_camera_direction_vectors( State_::CamCtrl_&);
+	void update_ship_position( State_::SpaceshipCtrl_ &, float );
+	void update_ship_direction_vectors( State_::SpaceshipCtrl_ & );
+
 
 	struct GLFWCleanupHelper
 	{
@@ -193,7 +209,6 @@ int main() try
 	
 	state.progTexture = &progTexture;
 	state.progColor = &progColor;
-	// state.camControl.radius = 10.f;
 
 	// Load Meshes and Textures
 	SimpleMeshData langersoMesh = load_wavefront_obj("assets/cw2/langerso.obj"); // Load Mesh
@@ -249,17 +264,14 @@ int main() try
 		kLightBlue_ , 
 		make_translation( { 0.f, cubeHeight, cylinderBodyRadius }) * 
 		make_scaling( cubeRadius, cubeHeight, cubeRadius ));
-		// make_rotation_z(2 * std::numbers::pi_v<float> / 3));
 	SimpleMeshData cubeMesh2 = make_cube(
 		kLightBlue_ , 
 		make_translation( { cylinderBodyRadius * sqrtf(3.f) / 2.0f, cubeHeight, -cylinderBodyRadius / 2.0f }) *
 		make_scaling( cubeRadius, cubeHeight, cubeRadius )); 
-		// make_rotation_z(2 * std::numbers::pi_v<float> / 3));
 	SimpleMeshData cubeMesh3 = make_cube(
 		kLightBlue_ , 
 		make_translation( { -cylinderBodyRadius * sqrtf(3.f) / 2.0f, cubeHeight , -cylinderBodyRadius / 2.0f }) * 
 		make_scaling( cubeRadius, cubeHeight, cubeRadius ));
-		// make_rotation_z(2 * std::numbers::pi_v<float> / 3));
 
 	GLuint vehicleVAO = create_vao( concatenate( {cylinderMesh1,cylinderMesh2,cylinderMesh3, coneMesh1, coneMesh2, coneMesh3, cubeMesh1, cubeMesh2, cubeMesh3} ));
 	std::size_t vehicleVertices = cylinderMesh1.positions.size() + cylinderMesh2.positions.size() + cylinderMesh2.positions.size() + 
@@ -306,10 +318,18 @@ int main() try
 		update_camera_position(state.camControl, dt);
         update_camera_direction_vectors(state.camControl);
 
+		// Update spaceship state
+		update_ship_position(state.spaceship, dt);
+		// update_ship_direction_vectors(state.spaceship);
+
 		// Define the camera rotation matrices
 		Mat44f Rx = make_rotation_x(state.camControl.theta); // Theta controls vertical rotation
 		Mat44f Ry = make_rotation_y(state.camControl.phi); // Phi controls the horizontal rotation		
 
+		// Define the spaceship rotation matrix
+		// state.spaceship.shipRotation = make_rotation_x(state.spaceship.angle);
+		//  * make_rotation_y(state.spaceship.angle);
+// 
 		// transformation for langerso
 		Mat44f T = make_translation({state.camControl.cameraPosition.x, state.camControl.cameraPosition.y, -state.camControl.cameraPosition.z}); // Define the camera position in world space
 		Mat44f world2camera = Rx * Ry * T; // Create world to camera matrix by first translating and then rotating
@@ -325,8 +345,9 @@ int main() try
 		// Render 2nd landingpad
 		render_model(progColor, landingpadVAO, projection, world2camera, kLandpadPosition2_, landingpadVertices );
 
-		// Render cylinder
-		render_model(progColor, vehicleVAO, projection, world2camera, kLandpadPosition1_, vehicleVertices );
+		// Render spaceship
+		// render_model(progColor, vehicleVAO, projection, world2camera , state.spaceship.shipPosition, vehicleVertices );
+		render_model(progColor, vehicleVAO, projection, world2camera * state.spaceship.shipRotation, state.spaceship.shipPosition, vehicleVertices );
 
 
 		OGL_CHECKPOINT_DEBUG();
@@ -375,26 +396,6 @@ namespace
 
 		if( auto* state = static_cast<State_*>(glfwGetWindowUserPointer( aWindow )) )
 		{
-			// // R-key reloads shaders.
-			// if( GLFW_KEY_R == aKey && GLFW_PRESS == aAction )
-			// {
-			// 	if( state->prog )
-			// 	{
-			// 		try
-			// 		{
-			// 			state->prog->reload();
-			// 			std::fprintf( stderr, "Shaders reloaded and recompiled.\n" );
-			// 		}
-			// 		catch( std::exception const& eErr )
-			// 		{
-			// 			std::fprintf( stderr, "Error when reloading shader:\n" );
-			// 			std::fprintf( stderr, "%s\n", eErr.what() );
-			// 			std::fprintf( stderr, "Keeping old shader.\n" );
-			// 		}
-			// 	}
-			// }
-	
-			// Camera controls if camera is active
 			if( state->camControl.cameraActive )
 			{	
 				if ( GLFW_KEY_W == aKey )
@@ -417,9 +418,23 @@ namespace
 					state->camControl.actionSlowDown = (GLFW_PRESS == aAction || GLFW_REPEAT == aAction );
 			
 			}
+
+			if ( GLFW_KEY_F == aKey && GLFW_PRESS == aAction )
+			{
+				state->spaceship.isAnimation = !state->spaceship.isAnimation; 
+				state->spaceship.isAnimationPaused = !state->spaceship.isAnimationPaused;
+			}
+			if ( GLFW_KEY_R == aKey && GLFW_PRESS == aAction )
+			{
+				state->spaceship.isAnimation = false;
+				state->spaceship.isAnimationPaused = true;
+				state->spaceship.shipPosition = state->spaceship.shipInitPosition;
+				state->spaceship.shipSpeed = state->spaceship.shipInitSpeed; 
+				state->spaceship.angle = state->spaceship.initAngle; 
+				state->spaceship.shipDirection = {0.0f, 1.0f, 0.0f}; 
+			}
 		}
 	}
-	
 
 	void glfw_callback_motion_( GLFWwindow* aWindow, double aX, double aY )
 	{
@@ -452,7 +467,6 @@ namespace
 			if ( GLFW_MOUSE_BUTTON_RIGHT == aButton && GLFW_PRESS == aAction )
 			{
 				state->camControl.cameraActive = !state->camControl.cameraActive;
-				std::cout << "Camera Active: " << state->camControl.cameraActive << std::endl;
 
 				if( state->camControl.cameraActive )
 					glfwSetInputMode( aWindow, GLFW_CURSOR, GLFW_CURSOR_HIDDEN );
@@ -488,8 +502,7 @@ namespace
 			aCamControl.cameraPosition += aCamControl.cameraUpDirection * aCamControl.movementSpeed * dt;
 		if (aCamControl.isDown)
 			aCamControl.cameraPosition -= aCamControl.cameraUpDirection * aCamControl.movementSpeed * dt;
-		// if ( state.camControl.radius <= 0.1f )
-		// 	state.camControl.radius = 0.1f;
+
 	}
 
 	void update_camera_direction_vectors( State_::CamCtrl_ &aCamControl)
@@ -509,7 +522,39 @@ namespace
 		aCamControl.cameraUpDirection = normalize(cross(aCamControl.cameraForwardDirection, aCamControl.cameraRightDirection));
 	}
 
+	void update_ship_position( State_::SpaceshipCtrl_ &aShipControl, float dt)
+	{
+		
+		if ( !aShipControl.isAnimation || aShipControl.isAnimationPaused ) return; // No movement if the animation is inactive
 
+		// Adjust ship movement speed
+        aShipControl.shipSpeed += aShipControl.acceleration * dt;
+        aShipControl.shipSpeed = std::min(aShipControl.shipSpeed, 5.f); // Prevent speed from going too fast
+
+		// Adjust ship direction of movement
+		aShipControl.angle += dt * aShipControl.shipSpeed / aShipControl.radius;
+        aShipControl.angle = std::min(aShipControl.angle, static_cast<float>(M_PI) - 0.1f); 
+
+		// Define the curved trajectory
+		float heightFactor = 2.0;  // Adjust this factor to control the vertical lift speed
+		aShipControl.shipPosition.x += aShipControl.radius * sin(aShipControl.angle);  // Sine for horizontal motion
+		aShipControl.shipPosition.y += dt * heightFactor ;  // Linear ascent
+		
+		aShipControl.shipDirection = normalize(Vec3f(cos(aShipControl.angle), 0, -sin(aShipControl.angle)));
+		
+		// Adjust ship position
+		// aShipControl.shipPosition += aShipControl.shipDirection * aShipControl.shipSpeed * dt;
+		std::fprintf( stderr, "position (%f,%f,%f)\n", aShipControl.shipPosition.x, aShipControl.shipPosition.y, aShipControl.shipPosition.z);
+		std::fprintf( stderr, "direction (%f,%f,%f)\n", aShipControl.shipDirection.x, aShipControl.shipDirection.y, aShipControl.shipDirection.z);
+	}
+
+// 	void update_ship_direction_vectors( State_::SpaceshipCtrl_ &aShipControl )
+// 	{
+		
+// 		aShipControl.shipDirection = normalize(Vec3f(
+// 			cos(shipControl.angle),
+// 			 0.0f, sin(shipControl.angle)));
+// 	}
 }
 
 namespace

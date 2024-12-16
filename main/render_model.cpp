@@ -18,7 +18,7 @@ void set_shader_uniforms( GLuint aShaderID, const Mat44f& aProjCameraWorld, cons
     glBindTexture( GL_TEXTURE_2D, aTextureID );
 }
 
-void set_shader_uniforms( GLuint aShaderID, const Mat44f& aProjCameraWorld, const Mat33f& aNormalMatrix)
+void set_shader_uniforms( GLuint aShaderID, const Mat44f& aProjCameraWorld, const Mat33f& aNormalMatrix )
 {
     glUseProgram( aShaderID );
     glUniformMatrix4fv( 0, 1, GL_TRUE, aProjCameraWorld.v );
