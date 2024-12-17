@@ -153,7 +153,7 @@ SimpleMeshData make_cube( Vec3f aColor, Mat44f aPreTransform )
 {
     SimpleMeshData meshData;
 
-    for (int i = 0; i < sizeof(kCubePositions) / sizeof(float) / 3; i++) 
+    for (std::size_t i = 0; i < sizeof(kCubePositions) / sizeof(float) / 3; i++) 
     {
         Vec4f tp = aPreTransform * Vec4f{ kCubePositions[3*i], kCubePositions[3*i+1], kCubePositions[3*i+2], 1.f };
         Vec4f tn = aPreTransform * Vec4f{ kCubeNormals[3*i], kCubeNormals[3*i+1], kCubeNormals[3*i+2], 1.f };

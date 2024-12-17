@@ -53,8 +53,6 @@ namespace
 
 		Vec3f trackCameraDistanceOffset = {0.f, -1.f, -5.f};
 		Vec3f groundCameraPosition = {-2.f, -0.1f, 1.f};
-		// Vec3f groundCameraPosition = kLandpadPosition2_;
-
 		
 		struct CamCtrl_
 		{
@@ -84,8 +82,6 @@ namespace
 			Vec3f shipInitPosition = kLandpadPosition1_;
 			Vec3f shipPosition = shipInitPosition;
 			Vec3f shipDirection = {0.0f, 1.0f, 0.0f}; // up to Y axis direction
-
-			Mat44f shipRotation = kIdentity44f;
 		} spaceship;
 	};
 
@@ -96,7 +92,6 @@ namespace
 	void update_camera_position_by_cam_movement( State_::CamCtrl_&, float );
 	void update_free_camera_direction_vectors( State_::CamCtrl_&);
 	void update_ship_position( State_::SpaceshipCtrl_ &, float );
-	void update_ship_direction_vectors( State_::SpaceshipCtrl_ & );	
 	void update_camera ( State_&, float );
 
 
@@ -326,17 +321,12 @@ int main() try
 		// Update camera state
 		update_camera(state, dt);
 
-
 		// Update spaceship state
 		update_ship_position(state.spaceship, dt);
-		// update_ship_direction_vectors(state.spaceship);
 
 		// Define the camera rotation matrices
 		Mat44f Rx = make_rotation_x(state.camControl.theta); // Theta controls vertical rotation -  yaw
 		Mat44f Ry = make_rotation_y(state.camControl.phi); // Phi controls the horizontal rotation	- pitch	
-
-		// Define the spaceship rotation matrix
-		state.spaceship.shipRotation =  make_rotation_x(state.spaceship.angle);
 
 		// transformation for langerso
 		Mat44f T = make_translation({state.camControl.cameraPosition.x, state.camControl.cameraPosition.y, -state.camControl.cameraPosition.z}); // Define the camera position in world space
@@ -348,16 +338,13 @@ int main() try
 		render_model(progTexture, langersoVAO, projection, world2camera, {0.f, 0.f, 0.f}, textureID, langersoVertices );
 	
 		// Render 1st landingpad
-		render_model(progColor, landingpadVAO, projection, world2camera, kLandpadPosition1_, landingpadVertices );
+		render_model(progColor, landingpadVAO, projection, world2camera, kLandpadPosition1_, false, landingpadVertices );
 	
 		// Render 2nd landingpad
-		render_model(progColor, landingpadVAO, projection, world2camera, kLandpadPosition2_, landingpadVertices );
+		render_model(progColor, landingpadVAO, projection, world2camera, kLandpadPosition2_,false, landingpadVertices );
 
 		// Render spaceship
-		render_model(progColor, vehicleVAO, projection, world2camera , state.spaceship.shipPosition, vehicleVertices );
-		
-		// render_model(progColor, vehicleVAO, projection, world2camera , state.spaceship.shipPosition, state.spaceship.shipRotation, vehicleVertices );
-
+		render_model(progColor, vehicleVAO, projection, world2camera , state.spaceship.shipPosition, false, vehicleVertices );
 
 		OGL_CHECKPOINT_DEBUG();
 
@@ -377,7 +364,11 @@ int main() try
 	// Cleanup.
 	state.progTexture = nullptr;
 	state.progColor = nullptr;
-	
+
+	glDeleteVertexArrays(1, &langersoVAO);
+	glDeleteVertexArrays(1, &landingpadVAO);
+	glDeleteVertexArrays(1, &vehicleVAO);
+	glDeleteTextures(1, &textureID);
 	return 0;
 }
 catch( std::exception const& eErr )
@@ -472,7 +463,6 @@ namespace
 		}
 	}
 
-	// ***********
 	void glfw_callback_mouse_button_( GLFWwindow* aWindow, int aButton, int aAction, int aMods )
 	{
 		if( auto* state = static_cast<State_*>(glfwGetWindowUserPointer( aWindow )) )
@@ -572,29 +562,12 @@ namespace
 		// Adjust ship direction of movement
 		aShipControl.angle += dt * aShipControl.shipSpeed / aShipControl.radius;
         aShipControl.angle = std::min(aShipControl.angle, static_cast<float>(M_PI) - 0.1f); 
-		// std::fprintf( stderr, "angle (%f)\n", aShipControl.angle);
-
 
 		// Define the curved trajectory
 		float heightFactor = 2.0;  // Adjust this factor to control the vertical lift speed
 		aShipControl.shipPosition.x += aShipControl.radius * sin(aShipControl.angle);  // Sine for horizontal motion
 		aShipControl.shipPosition.y += dt * heightFactor ;  // Linear ascent
-		// aShipControl.shipRotation = make_rotation_x((dt * heightFactor) / (aShipControl.radius * sin(aShipControl.angle)));
-		// aShipControl.shipDirection = normalize(Vec3f(cos(aShipControl.angle), 0, -sin(aShipControl.angle)));
-		
-		// Adjust ship position
-		// aShipControl.shipPosition += aShipControl.shipDirection * aShipControl.shipSpeed * dt;
-		// std::fprintf( stderr, "position (%f,%f,%f)\n", aShipControl.shipPosition.x, aShipControl.shipPosition.y, aShipControl.shipPosition.z);
-		// std::fprintf( stderr, "direction (%f,%f,%f)\n", aShipControl.shipDirection.x, aShipControl.shipDirection.y, aShipControl.shipDirection.z);
 	}
-
-// 	void update_ship_direction_vectors( State_::SpaceshipCtrl_ &aShipControl )
-// 	{
-		
-// 		aShipControl.shipDirection = normalize(Vec3f(
-// 			cos(shipControl.angle),
-// 			 0.0f, sin(shipControl.angle)));
-// 	}
 }
 
 namespace

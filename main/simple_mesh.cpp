@@ -84,7 +84,7 @@ GLuint create_vao( SimpleMeshData const& aMeshData )
 	glDeleteBuffers( 1, &vboPositions );
 	glDeleteBuffers( 1, &vboColors );
 	glDeleteBuffers( 1, &vboNormals );
-	// glDeleteBuffers( 1, &vboTexcoords );
+	glDeleteBuffers( 1, &vboTexcoords );
 
 	return vao;
 }
